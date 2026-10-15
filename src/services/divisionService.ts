@@ -20,7 +20,7 @@ export type Division = {
 export type DivisionPayload = {
   name: string;
   abbr: string;
-  divisionTypeId: string;
+  divisionTypeId?: string;
 };
 
 type ApiResponse<T> = {
@@ -60,10 +60,15 @@ export function getDivision(id: string) {
 }
 
 export function createDivision(payload: DivisionPayload) {
+  const requestBody: DivisionPayload = {
+    name: payload.name,
+    abbr: payload.abbr,
+    ...(payload.divisionTypeId ? { divisionTypeId: payload.divisionTypeId } : {}),
+  };
   return apiClient<ApiResponse<Division>>('/division', {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify(payload),
+    body: JSON.stringify(requestBody),
   }).then((response) => response.data);
 }
 

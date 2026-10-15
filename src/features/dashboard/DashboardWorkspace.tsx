@@ -115,8 +115,8 @@ function requestValue(request: WorkRequest, ...keys: string[]) {
 
 function getApiErrorMessage(error: unknown) {
   if (error instanceof ApiClientError) {
-    const data = error.data as { error?: { message?: string | string[] } } | null;
-    const message = data?.error?.message;
+    const data = error.data as { message?: string | string[]; error?: { message?: string | string[] } } | null;
+    const message = data?.message ?? data?.error?.message;
 
     if (Array.isArray(message)) {
       return message.join(', ');
@@ -195,7 +195,7 @@ function DivisionModal({
               value={form.name}
             />
           </label>
-          <label>
+          <label className="division-form__full">
             <span>Abbr</span>
             <input
               maxLength={30}
@@ -203,14 +203,6 @@ function DivisionModal({
               placeholder="ENG"
               required
               value={form.abbr}
-            />
-          </label>
-          <label>
-            <span>Division Type ID</span>
-            <input
-              onChange={(event) => onChange('divisionTypeId', event.target.value)}
-              placeholder="Optional UUID"
-              value={form.divisionTypeId}
             />
           </label>
           <div className="division-form__actions">
@@ -300,8 +292,12 @@ export function DashboardWorkspace({ modalOnly = false, createType, createReques
       closeMemberModal();
     },
     onError: (error) => {
-      setMemberFieldErrors(getApiFieldErrors(error));
-      toast.error(getApiErrorMessage(error));
+      const fieldErrors = getApiFieldErrors(error);
+      if (error instanceof ApiClientError && error.status === 409 && !fieldErrors.email) {
+        fieldErrors.email = 'A user or member with this email address already exists.';
+      }
+      setMemberFieldErrors(fieldErrors);
+      toast.error(fieldErrors.email ?? getApiErrorMessage(error));
     },
   });
 
@@ -326,7 +322,7 @@ export function DashboardWorkspace({ modalOnly = false, createType, createReques
     saveDivisionMutation.mutate({
       name: divisionForm.name.trim(),
       abbr: divisionForm.abbr.trim(),
-      divisionTypeId: divisionForm.divisionTypeId.trim(),
+      divisionTypeId: divisionForm.divisionTypeId?.trim(),
     });
   }
 
@@ -356,6 +352,13 @@ export function DashboardWorkspace({ modalOnly = false, createType, createReques
   function handleMemberSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalized = { ...memberForm, name: memberForm.name.trim(), email: memberForm.email.trim(), designationId: memberForm.designationId.trim(), phone: memberForm.phone.trim() };
+    const duplicateMember = members.find((member) => member.email.toLowerCase() === normalized.email.toLowerCase() && member.id !== editingMember?.id);
+    if (duplicateMember) {
+      const message = 'A member with this email address already exists.';
+      setMemberFieldErrors({ email: message });
+      toast.error(message);
+      return;
+    }
     saveMemberMutation.mutate(normalized);
   }
 

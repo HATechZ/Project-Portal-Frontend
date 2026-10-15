@@ -3,13 +3,14 @@ import { ApiClientError, apiClient } from '@/services/apiClient';
 export type Permission = {
   id: string;
   code: string;
-  name: string;
+  displayName: string;
+  /** Kept optional while older API responses are phased out. */
+  name?: string;
   description: string | null;
-  isUserVisible: boolean;
-  isRevisionAction: boolean;
-  isInfoRequestAction: boolean;
-  isAssignmentAction: boolean;
-  isTerminalAction: boolean;
+  category: string;
+  actionType: string;
+  resource: string;
+  compatibleScopes: string[];
 };
 
 export type AccessRole = {
@@ -36,8 +37,8 @@ export type UserRole = {
 
 type ApiResponse<T> = { success: boolean; message: string; data: T; timestamp: string };
 
-export type RolePayload = { name: string; description: string | null; scope: string; permissionCodes: string[] };
-export type RolePermissionPayload = Pick<RolePayload, 'scope' | 'permissionCodes'>;
+export type RolePayload = { name: string; description: string | null; scope: string; permissionIds: string[] };
+export type RolePermissionPayload = Pick<RolePayload, 'scope' | 'permissionIds'>;
 export type AssignUserRolePayload = { roleId: string; teamId?: string | null };
 
 function unwrap<T>(response: ApiResponse<T>) {
@@ -54,8 +55,13 @@ export function getAccessRole(roleId: string) {
 }
 
 export function getPermissions(scope?: string) {
-  const query = scope?.trim() ? `?${new URLSearchParams({ scope: scope.trim().toLowerCase() }).toString()}` : '';
-  return apiClient<ApiResponse<Permission[]>>(`/permission${query}`).then(unwrap);
+  const params = new URLSearchParams({ customRole: 'true' });
+  if (scope?.trim()) params.set('scope', scope.trim().toLowerCase());
+  const query = `?${params.toString()}`;
+  return apiClient<ApiResponse<Permission[]>>(`/permission${query}`).then(unwrap).then((permissions) => permissions.map((permission) => ({
+    ...permission,
+    name: permission.displayName,
+  })));
 }
 
 export function getPermission(permissionId: string) {
@@ -67,7 +73,7 @@ export function createAccessRole(payload: RolePayload) {
     name: payload.name.trim(),
     description: payload.description?.trim() || null,
     scope: payload.scope.trim().toLowerCase(),
-    permissionCodes: [...new Set(payload.permissionCodes.map((code) => code.trim()).filter(Boolean))],
+    permissionIds: [...new Set(payload.permissionIds.map((id) => id.trim()).filter(Boolean))],
   };
   return apiClient<ApiResponse<AccessRole>>('/role', {
     method: 'POST',
@@ -79,7 +85,7 @@ export function createAccessRole(payload: RolePayload) {
 export function updateRolePermissions(roleId: string, payload: RolePermissionPayload) {
   const requestBody: RolePermissionPayload = {
     scope: payload.scope.trim().toLowerCase(),
-    permissionCodes: [...new Set(payload.permissionCodes.map((code) => code.trim()).filter(Boolean))],
+    permissionIds: [...new Set(payload.permissionIds.map((id) => id.trim()).filter(Boolean))],
   };
   return apiClient<ApiResponse<AccessRole>>(`/role/${roleId}/permission`, {
     method: 'PUT',
@@ -107,7 +113,8 @@ export function assignUserRole(userId: string, payload: AssignUserRolePayload) {
 }
 
 export function revokeUserRole(userId: string, roleId: string) {
-  return apiClient<ApiResponse<unknown>>(`/user/${userId}/role/${roleId}`, { method: 'DELETE' }).then(unwrap);
+  // This endpoint intentionally returns an empty successful response.
+  return apiClient<unknown>(`/user/${userId}/role/${roleId}`, { method: 'DELETE' });
 }
 
 export function readableApiError(error: unknown, fallback: string) {
