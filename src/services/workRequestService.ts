@@ -2,6 +2,70 @@ import { apiClient } from '@/services/apiClient';
 
 export type WorkRequestPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
 
+export type WorkflowActionCode =
+  | 'WR_ASSIGN_DIVISION'
+  | 'WR_ASSIGN_TEAM'
+  | 'WR_ASSIGN_MEMBER'
+  | 'WR_SUBMIT'
+  | 'WR_CHECKING_APPROVE'
+  | 'WR_APPROVAL_APPROVE'
+  | 'WR_REQUEST_REVISION'
+  | 'WR_FINAL_RELEASE'
+  | 'REQUEST_WORKFLOW_INFO'
+  | 'RESPOND_WORKFLOW_INFO';
+
+export type WorkflowTargetKind =
+  | 'division'
+  | 'team'
+  | 'member'
+  | 'submit'
+  | 'workflow'
+  | 'info-request'
+  | 'info-response';
+
+export type AvailableWorkflowAction = {
+  code: WorkflowActionCode;
+  label: string;
+  targetKind: WorkflowTargetKind;
+};
+
+export type WorkRequestAssignment = {
+  id: string;
+  level: string;
+  divisionId: string | null;
+  teamId: string | null;
+  memberId: string | null;
+  assignee: { id: string; label: string } | null;
+  assignedAt: string;
+  unassignedAt: string | null;
+  replacedAt: string | null;
+  note: string | null;
+  assignedBy: { id: string; label: string };
+};
+
+export type WorkRequestEvent = {
+  id: string;
+  action: string;
+  priorState: string | null;
+  resultingState: string;
+  responsibilityLevel: string | null;
+  note: string | null;
+  occurredAt: string;
+  performedBy: { id: string; label: string };
+};
+
+export type WorkRequestEventsResponse = {
+  items: WorkRequestEvent[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
+};
+
 export type WorkRequestDocument = {
   id: string;
   documentCodeId?: string;
@@ -15,13 +79,14 @@ export type WorkRequest = {
   id: string;
   bidId: string | Record<string, unknown> | null;
   projectId: string | Record<string, unknown> | null;
+  shipmentNumber?: string | null;
   title: string;
   priority: WorkRequestPriority | string;
   notes: string | Record<string, unknown> | null;
   creator: Record<string, unknown> | null;
   currentState: string;
   documents: WorkRequestDocument[];
-  availableActions: unknown[];
+  availableActions: AvailableWorkflowAction[];
   createdAt: string;
   updatedAt: string;
 };
@@ -80,10 +145,15 @@ export function getWorkRequestDocumentVersions(id: string, documentId: string) {
   return apiClient<ApiResponse<unknown>>(`${requestPath(id)}/documents/${encodeURIComponent(documentId)}/versions`).then((response) => response.data);
 }
 
-export function getWorkRequestEvents(id: string) {
-  return apiClient<ApiResponse<unknown>>(`${requestPath(id)}/events`).then((response) => response.data);
+export function getWorkRequestAssignments(id: string) {
+  return apiClient<ApiResponse<WorkRequestAssignment[]>>(`${requestPath(id)}/assignments`).then((response) => response.data);
+}
+
+export function getWorkRequestEvents(id: string, page = 1, limit = 20) {
+  const query = new URLSearchParams({ page: String(page), limit: String(limit) });
+  return apiClient<ApiResponse<WorkRequestEventsResponse>>(`${requestPath(id)}/events?${query}`).then((response) => response.data);
 }
 
 export function getWorkRequestAvailableActions(id: string) {
-  return apiClient<ApiResponse<unknown>>(`${requestPath(id)}/available-actions`).then((response) => response.data);
+  return apiClient<ApiResponse<AvailableWorkflowAction[]>>(`${requestPath(id)}/available-actions`).then((response) => response.data);
 }

@@ -5,6 +5,7 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { ProjectsPage } from '@/pages/ProjectsPage';
 import { TasksPage } from '@/pages/TasksPage';
 import { WorkRequestsPage } from '@/pages/WorkRequestsPage';
+import { WorkRequestDetailsPage } from '@/pages/WorkRequestDetailsPage';
 import { TeamPage } from '@/pages/TeamPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -50,6 +51,14 @@ export const router = createBrowserRouter([
         element: (
           <DashboardLayout>
             <WorkRequestsPage />
+          </DashboardLayout>
+        ),
+      },
+      {
+        path: 'work-requests/:id',
+        element: (
+          <DashboardLayout>
+            <WorkRequestDetailsPage />
           </DashboardLayout>
         ),
       },
