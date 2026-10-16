@@ -106,6 +106,47 @@ export type UpdateWorkRequestPayload = {
   notes: string | null;
 };
 
+export type WorkRequestAssignmentCommand = {
+  note?: string;
+};
+
+export type AssignWorkRequestDivisionPayload = WorkRequestAssignmentCommand & {
+  divisionId: string;
+};
+
+export type AssignWorkRequestTeamPayload = WorkRequestAssignmentCommand & {
+  teamId: string;
+};
+
+export type AssignWorkRequestMemberPayload = WorkRequestAssignmentCommand & {
+  memberId: string;
+};
+
+export type WorkRequestAssignmentCommandResult = {
+  id: string;
+  level: string;
+  divisionId: string | null;
+  teamId: string | null;
+  memberId: string | null;
+  assignedAt: string;
+  currentState: string;
+};
+
+export type WorkRequestWorkflowNotePayload = {
+  note?: string;
+};
+
+export type WorkRequestWorkflowActionPayload = WorkRequestWorkflowNotePayload & {
+  actionCode: Extract<WorkflowActionCode, 'WR_CHECKING_APPROVE' | 'WR_APPROVAL_APPROVE' | 'WR_REQUEST_REVISION' | 'WR_FINAL_RELEASE'>;
+};
+
+export type WorkRequestWorkflowCommandResult = {
+  eventId: string;
+  action: string;
+  currentState: string;
+  occurredAt: string;
+};
+
 type ApiResponse<T> = { success: boolean; message: string; data: T; timestamp: string };
 export type WorkRequestList = { items: WorkRequest[]; meta: { page: number; limit: number; total: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean } };
 
@@ -119,7 +160,7 @@ export function getWorkRequest(id: string) {
   return apiClient<ApiResponse<WorkRequest>>(requestPath(id)).then((response) => response.data);
 }
 
-export function createWorkRequest(payload: CreateWorkRequestPayload) {
+export function createWorkRequest(payload: CreateWorkRequestPayload, requestId?: string) {
   const formData = new FormData();
   if (payload.bidId) formData.append('bidId', payload.bidId);
   if (payload.projectId) formData.append('projectId', payload.projectId);
@@ -130,7 +171,7 @@ export function createWorkRequest(payload: CreateWorkRequestPayload) {
   payload.attachments.forEach(({ documentCodeId }) => formData.append('documentCodeIds', documentCodeId));
   payload.attachments.forEach(({ file }) => formData.append('files', file));
 
-  return apiClient<ApiResponse<WorkRequest>>('/work-requests', { method: 'POST', body: formData }).then((response) => response.data);
+  return apiClient<ApiResponse<WorkRequest>>('/work-requests', { method: 'POST', headers: requestId ? { 'x-request-id': requestId } : undefined, body: formData }).then((response) => response.data);
 }
 
 export function updateWorkRequest(id: string, payload: UpdateWorkRequestPayload) {
@@ -156,4 +197,48 @@ export function getWorkRequestEvents(id: string, page = 1, limit = 20) {
 
 export function getWorkRequestAvailableActions(id: string) {
   return apiClient<ApiResponse<AvailableWorkflowAction[]>>(`${requestPath(id)}/available-actions`).then((response) => response.data);
+}
+
+function assignmentHeaders(requestId: string) {
+  return { 'x-request-id': requestId };
+}
+
+export function assignWorkRequestDivision(id: string, payload: AssignWorkRequestDivisionPayload, requestId: string) {
+  return apiClient<ApiResponse<WorkRequestAssignmentCommandResult>>(`${requestPath(id)}/assignments/division`, {
+    method: 'POST',
+    headers: assignmentHeaders(requestId),
+    body: JSON.stringify(payload),
+  }).then((response) => response.data);
+}
+
+export function assignWorkRequestTeam(id: string, payload: AssignWorkRequestTeamPayload, requestId: string) {
+  return apiClient<ApiResponse<WorkRequestAssignmentCommandResult>>(`${requestPath(id)}/assignments/team`, {
+    method: 'POST',
+    headers: assignmentHeaders(requestId),
+    body: JSON.stringify(payload),
+  }).then((response) => response.data);
+}
+
+export function assignWorkRequestMember(id: string, payload: AssignWorkRequestMemberPayload, requestId: string) {
+  return apiClient<ApiResponse<WorkRequestAssignmentCommandResult>>(`${requestPath(id)}/assignments/member`, {
+    method: 'POST',
+    headers: assignmentHeaders(requestId),
+    body: JSON.stringify(payload),
+  }).then((response) => response.data);
+}
+
+export function submitWorkRequest(id: string, payload: WorkRequestWorkflowNotePayload, requestId: string) {
+  return apiClient<ApiResponse<WorkRequestWorkflowCommandResult>>(requestPath(id) + '/submit', {
+    method: 'POST',
+    headers: assignmentHeaders(requestId),
+    body: JSON.stringify(payload),
+  }).then((response) => response.data);
+}
+
+export function applyWorkRequestWorkflowAction(id: string, payload: WorkRequestWorkflowActionPayload, requestId: string) {
+  return apiClient<ApiResponse<WorkRequestWorkflowCommandResult>>(requestPath(id) + '/actions', {
+    method: 'POST',
+    headers: assignmentHeaders(requestId),
+    body: JSON.stringify(payload),
+  }).then((response) => response.data);
 }

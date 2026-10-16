@@ -1,11 +1,12 @@
 import { ArrowLeft, CalendarClock, PackageCheck } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import type { AvailableWorkflowAction, WorkRequest } from '@/services/workRequestService';
+import type { WorkRequest } from '@/services/workRequestService';
 import { formatDateTime, labelFromRecord, referenceValue, workflowStateLabel } from './workflowPresentation';
 
-type WorkRequestHeaderProps = { workRequest: WorkRequest; availableActions: AvailableWorkflowAction[] };
+type WorkRequestHeaderProps = { workRequest: WorkRequest; actionArea?: ReactNode };
 
-export function WorkRequestHeader({ workRequest, availableActions }: WorkRequestHeaderProps) {
+export function WorkRequestHeader({ workRequest, actionArea }: WorkRequestHeaderProps) {
   const parentType = workRequest.projectId ? 'Project' : workRequest.bidId ? 'Bid' : null;
   const parentReference = referenceValue(workRequest.projectId ?? workRequest.bidId);
 
@@ -28,7 +29,7 @@ export function WorkRequestHeader({ workRequest, availableActions }: WorkRequest
           </div>
         </div>
         <div className="work-request-header__state">
-          {availableActions.length ? <div className="work-request-header__actions">{availableActions.map((action) => <button disabled key={action.code} title="This workflow action will be enabled when its command form is available." type="button">{action.label}</button>)}</div> : null}
+          {actionArea}
           <small><CalendarClock size={14} /> Updated {formatDateTime(workRequest.updatedAt)}</small>
         </div>
       </div>

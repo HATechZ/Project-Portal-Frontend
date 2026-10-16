@@ -8,11 +8,13 @@ export const INTERNAL_WORKFLOW_STEPS = [
   { state: 'FINAL_RELEASE', label: 'Final Release', assignmentLevel: undefined },
 ] as const;
 
-export type InternalWorkflowState = 'CREATED' | (typeof INTERNAL_WORKFLOW_STEPS)[number]['state'];
+export type InternalWorkflowState = 'CREATED' | 'DIVISION_ASSIGNED' | 'TEAM_ASSIGNED' | (typeof INTERNAL_WORKFLOW_STEPS)[number]['state'];
 export type WorkflowStepStatus = 'pending' | 'current' | 'completed';
 
 const stateLabels: Record<InternalWorkflowState, string> = {
   CREATED: 'Awaiting Assignment',
+  DIVISION_ASSIGNED: 'Division Assigned',
+  TEAM_ASSIGNED: 'Team Assigned',
   MEMBER_ASSIGNED: 'Preparation',
   CHECKING_REVIEW: 'Checking Review',
   APPROVAL_REVIEW: 'Approval Review',

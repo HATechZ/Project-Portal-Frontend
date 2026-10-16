@@ -716,6 +716,24 @@ button:disabled,
 .work-request-reference__choices { display: flex; gap: 18px; }
 .work-request-reference__choices label { display: inline-flex; align-items: center; gap: 7px; color: #364b55; font-size: 13px; font-weight: 650; }
 .work-request-reference__choices input { width: auto; min-height: auto; margin: 0; accent-color: #0b5262; }
+.work-request-routing { display: grid; grid-column: 1 / -1; gap: 14px; border: 1px solid #dce8eb; border-radius: 11px; background: #f8fbfb; padding: 16px; }
+.work-request-routing__head h3 { margin: 0; border: 0; padding: 0; color: #21434b; font-size: 13px; }
+.work-request-routing__head em { color: #82919a; font-size: 11px; font-style: normal; font-weight: 500; }
+.work-request-routing__head p { margin: 5px 0 0; color: #71818a; font-size: 11px; line-height: 1.45; }
+.work-request-routing__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+.work-request-routing__member, .work-request-routing__note { grid-column: 1 / -1; }
+.work-request-routing__member small { color: #71818a; font-size: 11px; line-height: 1.4; }
+.work-request-routing__progress { grid-column: 1 / -1; min-height: 0; color: #0a6570; font-size: 12px; font-weight: 700; }
+@media (max-width: 760px) { .work-request-routing__grid { grid-template-columns: 1fr; } .work-request-routing__member, .work-request-routing__note { grid-column: auto; } }
+
+.work-request-header__actions { display: flex; max-width: 460px; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.work-request-action { min-height: 34px; border: 1px solid #0b6474; border-radius: 8px; background: #0b6474; color: #fff; padding: 0 11px; font-size: 11px; font-weight: 750; }
+.work-request-action:hover { background: #07525f; }
+.work-request-action--secondary { border-color: #bfd5d9; background: #f4faf9; color: #0a6570; }
+.work-request-action--warning { border-color: #d9a35d; background: #fff8eb; color: #9a5a08; }
+.work-request-action:disabled { cursor: not-allowed; opacity: .65; }
+.work-request-action-dialog { width: min(520px, 100%); }
+@media (max-width: 700px) { .work-request-header__actions { max-width: none; justify-content: flex-start; } }
 .member-field-error { margin-top: -2px; color: #c44236; font-size: 11px; font-weight: 650; line-height: 1.35; }
 .division-form input[type="file"] { min-height: 84px; border: 1px dashed #9ac4c9; border-radius: 10px; background: #f6fbfb; padding: 12px; color: #34616a; font-size: 12px; }
 .division-form input[type="file"]::file-selector-button { height: 32px; margin-right: 10px; border: 0; border-radius: 7px; background: #e0f3f2; color: #0a6570; padding: 0 11px; font-size: 11px; font-weight: 750; cursor: pointer; }
