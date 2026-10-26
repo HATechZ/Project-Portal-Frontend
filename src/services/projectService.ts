@@ -1,7 +1,7 @@
 import { apiClient } from '@/services/apiClient';
 
 export type ProjectDocument = { id: string; documentCodeId: string; originalFileName: string; generatedFileName: string | null; storageKey?: string; mimeType?: string; size?: number };
-export type Project = { id: string; name: string; clientId: string; status: string; fileCount: number; documents: ProjectDocument[]; createdAt: string; updatedAt: string };
+export type Project = { id: string; name: string; clientId: string; projectCode?: string; shipmentNumber?: string; status: string; fileCount: number; documents: ProjectDocument[]; createdAt: string; updatedAt: string };
 export type CreateProjectPayload = {
   name: string;
   clientId: string;

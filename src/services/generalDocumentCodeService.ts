@@ -21,6 +21,9 @@ const documentCodePath = (id: string) => `${basePath}/${encodeURIComponent(id)}`
 export function getGeneralDocumentCodes() {
   return apiClient<ApiResponse<GeneralDocumentCode[]>>(basePath).then((response) => response.data);
 }
+export function getActiveGeneralDocumentCodes() {
+  return apiClient<ApiResponse<GeneralDocumentCode[]>>(`${basePath}?status=active`).then((response) => response.data);
+}
 
 export function getDeactivatedGeneralDocumentCodes() {
   return apiClient<ApiResponse<GeneralDocumentCode[]>>(`${basePath}/deactivated`).then((response) => response.data);

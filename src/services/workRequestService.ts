@@ -1,6 +1,7 @@
 import { apiClient } from '@/services/apiClient';
 
-export type WorkRequestPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
+export const WORK_REQUEST_PRIORITIES = ['Low', 'Medium', 'High'] as const;
+export type WorkRequestPriority = (typeof WORK_REQUEST_PRIORITIES)[number];
 
 export type WorkflowActionCode =
   | 'WR_ASSIGN_DIVISION'
@@ -91,13 +92,52 @@ export type WorkRequest = {
   updatedAt: string;
 };
 
-export type CreateWorkRequestPayload = {
+export type CreateWorkRequestDocumentInput = {
+  documentCodeId: string;
+  file: File;
+  description?: string;
+  shipmentNumber?: string;
+};
+
+export type CreateWorkRequestInput = {
+  parentType: 'BID' | 'PROJECT';
   bidId?: string;
   projectId?: string;
   title: string;
   priority: WorkRequestPriority;
   notes?: string;
-  attachments: Array<{ file: File; documentCodeId: string }>;
+  originatingDivisionId: string;
+  intermediateDivisionIds: string[];
+  documents: CreateWorkRequestDocumentInput[];
+};
+
+export type CreateWorkRequestDocumentResponse = {
+  id: string;
+  documentCodeId: string | null;
+  documentCode: string | null;
+  description: string | null;
+  shipmentNumber: string | null;
+  originalFileName: string;
+  generatedFileName: string | null;
+  mimeType: string;
+  size: number;
+  lastUpdatedAt: string;
+};
+
+export type CreateWorkRequestResponseData = {
+  id: string;
+  bidId: string | null;
+  projectId: string | null;
+  shipmentNumber: string | null;
+  title: string;
+  priority: WorkRequestPriority;
+  notes: string | null;
+  creator: { id: string; label: string } | null;
+  currentState: string;
+  documents: CreateWorkRequestDocumentResponse[];
+  availableActions: unknown[];
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type UpdateWorkRequestPayload = {
@@ -148,6 +188,7 @@ export type WorkRequestWorkflowCommandResult = {
 };
 
 type ApiResponse<T> = { success: boolean; message: string; data: T; timestamp: string };
+export type ApiSuccessResponse<T> = { success: true; message: string; data: T; timestamp: string };
 export type WorkRequestList = { items: WorkRequest[]; meta: { page: number; limit: number; total: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean } };
 
 const requestPath = (id: string) => `/work-requests/${encodeURIComponent(id)}`;
@@ -160,18 +201,28 @@ export function getWorkRequest(id: string) {
   return apiClient<ApiResponse<WorkRequest>>(requestPath(id)).then((response) => response.data);
 }
 
-export function createWorkRequest(payload: CreateWorkRequestPayload, requestId?: string) {
+export function createWorkRequest(input: CreateWorkRequestInput, requestId: string) {
   const formData = new FormData();
-  if (payload.bidId) formData.append('bidId', payload.bidId);
-  if (payload.projectId) formData.append('projectId', payload.projectId);
-  formData.append('title', payload.title);
-  formData.append('priority', payload.priority);
-  if (payload.notes) formData.append('notes', payload.notes);
-  // Keep code and file values in the same order so each code identifies its file.
-  payload.attachments.forEach(({ documentCodeId }) => formData.append('documentCodeIds', documentCodeId));
-  payload.attachments.forEach(({ file }) => formData.append('files', file));
+  if (input.parentType === 'BID' && input.bidId) formData.append('bidId', input.bidId);
+  if (input.parentType === 'PROJECT' && input.projectId) formData.append('projectId', input.projectId);
+  formData.append('title', input.title.trim());
+  formData.append('priority', input.priority);
+  const notes = input.notes?.trim();
+  if (notes) formData.append('notes', notes);
+  formData.append('originatingDivisionId', input.originatingDivisionId);
+  input.intermediateDivisionIds.forEach((divisionId) => formData.append('intermediateDivisionIds', divisionId));
+  input.documents.forEach(({ documentCodeId, file, description, shipmentNumber }) => {
+    formData.append('documentCodeIds', documentCodeId);
+    formData.append('files', file);
+    formData.append('descriptions', description?.trim() ?? '');
+    formData.append('shipmentNumbers', shipmentNumber?.trim() ?? '');
+  });
 
-  return apiClient<ApiResponse<WorkRequest>>('/work-requests', { method: 'POST', headers: requestId ? { 'x-request-id': requestId } : undefined, body: formData }).then((response) => response.data);
+  return apiClient<ApiSuccessResponse<CreateWorkRequestResponseData>>('/work-requests', {
+    method: 'POST',
+    headers: { 'x-request-id': requestId },
+    body: formData,
+  });
 }
 
 export function updateWorkRequest(id: string, payload: UpdateWorkRequestPayload) {

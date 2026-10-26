@@ -21,6 +21,9 @@ const documentCodePath = (id: string) => `${basePath}/${encodeURIComponent(id)}`
 export function getProjectManagementOperationDocumentCodes() {
   return apiClient<ApiResponse<ProjectManagementOperationDocumentCode[]>>(basePath).then((response) => response.data);
 }
+export function getActiveProjectManagementOperationDocumentCodes() {
+  return apiClient<ApiResponse<ProjectManagementOperationDocumentCode[]>>(`${basePath}?status=active`).then((response) => response.data);
+}
 
 export function getDeactivatedProjectManagementOperationDocumentCodes() {
   return apiClient<ApiResponse<ProjectManagementOperationDocumentCode[]>>(`${basePath}/deactivated`).then((response) => response.data);

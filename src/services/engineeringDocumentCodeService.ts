@@ -21,6 +21,9 @@ const documentCodePath = (id: string) => `${basePath}/${encodeURIComponent(id)}`
 export function getEngineeringDocumentCodes() {
   return apiClient<ApiResponse<EngineeringDocumentCode[]>>(basePath).then((response) => response.data);
 }
+export function getActiveEngineeringDocumentCodes() {
+  return apiClient<ApiResponse<EngineeringDocumentCode[]>>(`${basePath}?status=active`).then((response) => response.data);
+}
 
 export function getDeactivatedEngineeringDocumentCodes() {
   return apiClient<ApiResponse<EngineeringDocumentCode[]>>(`${basePath}/deactivated`).then((response) => response.data);

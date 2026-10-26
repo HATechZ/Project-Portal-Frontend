@@ -21,6 +21,9 @@ const documentCodePath = (id: string) => `${basePath}/${encodeURIComponent(id)}`
 export function getEtcDocumentCodes() {
   return apiClient<ApiResponse<EtcDocumentCode[]>>(basePath).then((response) => response.data);
 }
+export function getActiveEtcDocumentCodes() {
+  return apiClient<ApiResponse<EtcDocumentCode[]>>(`${basePath}?status=active`).then((response) => response.data);
+}
 
 export function getDeactivatedEtcDocumentCodes() {
   return apiClient<ApiResponse<EtcDocumentCode[]>>(`${basePath}/deactivated`).then((response) => response.data);

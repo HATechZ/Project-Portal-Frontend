@@ -19,6 +19,7 @@ const basePath = '/marketing-document-codes';
 const documentCodePath = (id: string) => `${basePath}/${encodeURIComponent(id)}`;
 
 export function getMarketingDocumentCodes() { return apiClient<ApiResponse<MarketingDocumentCode[]>>(basePath).then((response) => response.data); }
+export function getActiveMarketingDocumentCodes() { return apiClient<ApiResponse<MarketingDocumentCode[]>>(`${basePath}?status=active`).then((response) => response.data); }
 export function getDeactivatedMarketingDocumentCodes() { return apiClient<ApiResponse<MarketingDocumentCode[]>>(`${basePath}/deactivated`).then((response) => response.data); }
 export function getMarketingDocumentCode(id: string) { return apiClient<ApiResponse<MarketingDocumentCode>>(documentCodePath(id)).then((response) => response.data); }
 export function createMarketingDocumentCode(payload: MarketingDocumentCodePayload) { return apiClient<ApiResponse<MarketingDocumentCode>>(basePath, { method: 'POST', body: JSON.stringify(payload) }).then((response) => response.data); }
