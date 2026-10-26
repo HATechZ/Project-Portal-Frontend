@@ -2,6 +2,8 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { App } from '@/App';
 import { AuthPage } from '@/pages/AuthPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { BidsPage } from '@/pages/BidsPage';
+import { DocumentsPage } from '@/pages/DocumentsPage';
 import { ProjectsPage } from '@/pages/ProjectsPage';
 import { TasksPage } from '@/pages/TasksPage';
 import { WorkRequestsPage } from '@/pages/WorkRequestsPage';
@@ -29,6 +31,10 @@ export const router = createBrowserRouter([
             <DashboardPage />
           </DashboardLayout>
         ),
+      },
+      {
+        path: 'bids',
+        element: <DashboardLayout><BidsPage /></DashboardLayout>,
       },
       {
         path: 'projects',
@@ -61,6 +67,14 @@ export const router = createBrowserRouter([
             <WorkRequestDetailsPage />
           </DashboardLayout>
         ),
+      },
+      {
+        path: 'documents',
+        element: <DashboardLayout><DocumentsPage /></DashboardLayout>,
+      },
+      {
+        path: 'organization',
+        element: <DashboardLayout><TeamPage /></DashboardLayout>,
       },
       {
         path: 'team',
