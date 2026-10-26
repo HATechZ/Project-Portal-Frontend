@@ -1,5 +1,6 @@
 import type { FormEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { ApiClientError } from '@/services/apiClient';
@@ -93,7 +94,7 @@ function UploadDocumentModal({ onClose }: { onClose: () => void }) {
 
 function CriticalWork({ workRequests, loading }: { workRequests: WorkRequest[]; loading: boolean }) {
   const requests = [...workRequests].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()).slice(0, 5);
-  return <section className="dash-panel dash-critical-panel"><div className="dash-panel-head"><div><strong>Work Requests</strong></div></div><div className="dash-critical-table"><div className="dash-critical-row dash-critical-row--head"><span>Title</span><span>Type</span><span>Ship. No</span><span>Revision</span><span>Last Update</span><span>Status</span><span>Actions</span></div>{loading ? <p>Loading current work requests...</p> : requests.map((request) => <div className="dash-critical-row" key={request.id}><div><strong>{request.title}</strong><small>WR-{request.id.slice(0, 8).toUpperCase()}</small></div><span>{request.projectId ? 'Project' : request.bidId ? 'Bid' : 'General'}</span><span>{requestValue(request, 'shipmentNumber', 'shipmentNo') ?? '—'}</span><span>{requestValue(request, 'revision', 'revisionNumber') ?? '—'}</span><small>{formatDate(request.updatedAt)}</small><span><em>{request.currentState || '—'}</em></span><a className="dash-critical-action" href="/work-requests">Open</a></div>)}{!loading && !requests.length ? <p>No work requests are available yet.</p> : null}</div></section>;
+  return <section className="dash-panel dash-critical-panel"><div className="dash-panel-head"><div><strong>Work Requests</strong></div></div><div className="dash-critical-table"><div className="dash-critical-row dash-critical-row--head"><span>Title</span><span>Type</span><span>Ship. No</span><span>Revision</span><span>Last Update</span><span>Status</span><span>Actions</span></div>{loading ? <p>Loading current work requests...</p> : requests.map((request) => <div className="dash-critical-row" key={request.id}><div><strong>{request.title}</strong><small>WR-{request.id.slice(0, 8).toUpperCase()}</small></div><span>{request.projectId ? 'Project' : request.bidId ? 'Bid' : 'General'}</span><span>{requestValue(request, 'shipmentNumber', 'shipmentNo') ?? '—'}</span><span>{requestValue(request, 'revision', 'revisionNumber') ?? '—'}</span><small>{formatDate(request.updatedAt)}</small><span><em>{request.currentState || '—'}</em></span><Link className="dash-critical-action" to={`/work-requests/${request.id}`}>Open</Link></div>)}{!loading && !requests.length ? <p>No work requests are available yet.</p> : null}</div></section>;
 }
 
 function ActivityTrail({ bids, projects, workRequests }: { bids: Bid[]; projects: Project[]; workRequests: WorkRequest[] }) {

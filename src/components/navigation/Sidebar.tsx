@@ -33,7 +33,12 @@ export function Sidebar({ collapsed, mobileOpen = false, onNavigate }: SidebarPr
         )}
       </div>
       <nav className="sidebar-nav" aria-label="Main navigation">
-        {navigationItems.map((item) => (
+        {navigationItems.map((item) => item.disabled ? (
+          <span aria-disabled="true" className="nav-item nav-item--disabled" key={item.label} title="Reports are not available yet">
+            <item.icon size={20} />
+            {(!collapsed || mobileOpen) && <span>{item.label}</span>}
+          </span>
+        ) : (
           <NavLink
             key={item.label}
             to={item.path}
