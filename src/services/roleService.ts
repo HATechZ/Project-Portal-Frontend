@@ -64,6 +64,13 @@ export function getPermissions(scope?: string) {
   })));
 }
 
+/** Filters the permission catalogue using the compatibility declared by the API. */
+export function permissionsCompatibleWithScope(permissions: Permission[], scope: string) {
+  const normalizedScope = scope.trim().toLowerCase();
+  if (!normalizedScope) return [];
+  return permissions.filter((permission) => Array.isArray(permission.compatibleScopes) && permission.compatibleScopes.some((compatibleScope) => compatibleScope.trim().toLowerCase() === normalizedScope));
+}
+
 export function getPermission(permissionId: string) {
   return apiClient<ApiResponse<Permission>>(`/permission/${permissionId}`).then(unwrap);
 }

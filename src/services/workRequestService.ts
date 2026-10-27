@@ -124,6 +124,17 @@ export type CreateWorkRequestDocumentResponse = {
   lastUpdatedAt: string;
 };
 
+export type WorkRequestDocumentUploadResponse = {
+  documentId: string;
+  owner: unknown;
+  documentCode: string | null;
+  originalFileName: string;
+  description: string | null;
+  shipmentNumber: string | null;
+  lastUpdatedAt: string;
+  latestVersion: unknown;
+};
+
 export type CreateWorkRequestResponseData = {
   id: string;
   bidId: string | null;
@@ -231,6 +242,22 @@ export function updateWorkRequest(id: string, payload: UpdateWorkRequestPayload)
 
 export function getWorkRequestDocuments(id: string) {
   return apiClient<ApiResponse<unknown>>(`${requestPath(id)}/documents`).then((response) => response.data);
+}
+
+export function uploadWorkRequestDocuments(id: string, documents: CreateWorkRequestDocumentInput[], requestId: string) {
+  const formData = new FormData();
+  documents.forEach(({ file, documentCodeId, description, shipmentNumber }) => {
+    formData.append('files', file);
+    formData.append('documentCodeIds', documentCodeId);
+    formData.append('descriptions', description?.trim() ?? '');
+    formData.append('shipmentNumbers', shipmentNumber?.trim() ?? '');
+  });
+
+  return apiClient<ApiSuccessResponse<WorkRequestDocumentUploadResponse[]>>(`${requestPath(id)}/documents`, {
+    method: 'POST',
+    headers: { 'x-request-id': requestId },
+    body: formData,
+  });
 }
 
 export function getWorkRequestDocumentVersions(id: string, documentId: string) {

@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { ApiClientError } from '@/services/apiClient';
@@ -28,7 +28,8 @@ import { getBids, type Bid } from '@/services/bidService';
 import { getProjects, type Project } from '@/services/projectService';
 import { getWorkRequests, type WorkRequest } from '@/services/workRequestService';
 import { getGeneralDocumentCodes } from '@/services/generalDocumentCodeService';
-import { AttachmentUpload, type PendingAttachment } from '@/components/ui/AttachmentUpload';
+import { AttachmentUpload } from '@/components/ui/AttachmentUpload';
+import { createPendingAttachment, type PendingAttachment } from '@/components/ui/attachmentDraft';
 import { ArrowRight, BadgeCheck, Building2, ClipboardList, Clock3, FileCheck2, FilePlus2, FolderKanban, FolderOpen, Upload, Users, UsersRound } from 'lucide-react';
 
 const divisionsQueryKey = ['divisions'];
@@ -73,11 +74,12 @@ function MetricsStrip({ bids, projects, workRequests, members, loading }: {
 }
 
 function QuickAccess({ bids, projects, loading }: { bids: Bid[]; projects: Project[]; loading: boolean }) {
+  const navigate = useNavigate();
   const workspaces = [
     ...bids.map((bid) => ({ id: bid.id, name: bid.name, type: 'Bid', client: bid.projectCode || 'Bid workspace', status: bid.status || 'Active', updatedAt: bid.updatedAt })),
     ...projects.map((project) => ({ id: project.id, name: project.name, type: 'Project', client: 'Project workspace', status: project.status || 'Active', updatedAt: project.updatedAt })),
   ].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()).slice(0, 4);
-  return <section className="dash-panel dash-workspace-panel"><div className="dash-panel-head"><div><FolderOpen size={17} /><strong>Quick access workspaces</strong></div><span>Recently updated</span></div><div className="dash-workspace-grid">{loading ? <p>Loading workspaces...</p> : workspaces.length ? workspaces.map((workspace) => <article key={`${workspace.type}-${workspace.id}`}><div className={`dash-workspace-icon dash-workspace-icon--${workspace.type.toLowerCase()}`}><FolderOpen size={18} /></div><div><strong>{workspace.name}</strong><small><em>{workspace.type}</em>{workspace.client} · {workspace.status}</small></div><ArrowRight size={17} /></article>) : <p>No project or bid workspaces are available yet.</p>}</div></section>;
+  return <section className="dash-panel dash-workspace-panel"><div className="dash-panel-head"><div><FolderOpen size={17} /><strong>Quick access workspaces</strong></div><span>Recently updated</span></div><div className="dash-workspace-grid">{loading ? <p>Loading workspaces...</p> : workspaces.length ? workspaces.map((workspace) => { const path = `/${workspace.type === 'Bid' ? 'bids' : 'projects'}/${workspace.id}`; return <article aria-label={`Open ${workspace.name}`} key={`${workspace.type}-${workspace.id}`} onClick={() => navigate(path)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(path); } }} role="link" tabIndex={0}><div className={`dash-workspace-icon dash-workspace-icon--${workspace.type.toLowerCase()}`}><FolderOpen size={18} /></div><div><strong>{workspace.name}</strong><small><em>{workspace.type}</em>{workspace.client} · {workspace.status}</small></div><ArrowRight size={17} /></article>; }) : <p>No project or bid workspaces are available yet.</p>}</div></section>;
 }
 
 function QuickActions({ onBid, onProject, onWorkRequest, onUpload, onDivision, onMember, onTeam }: { onBid: () => void; onProject: () => void; onWorkRequest: () => void; onUpload: () => void; onDivision: () => void; onMember: () => void; onTeam: () => void }) {
@@ -89,12 +91,12 @@ function UploadDocumentModal({ onClose }: { onClose: () => void }) {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const codesQuery = useQuery({ queryKey: ['general-document-codes'], queryFn: getGeneralDocumentCodes });
   const codes = (codesQuery.data ?? []).filter((code) => code.isActive);
-  return <div className="division-modal-backdrop" role="presentation"><section aria-modal="true" className="division-modal division-modal--wide" role="dialog"><div className="division-modal__head"><div><strong>Upload Document</strong><span>Select files and classify each attachment.</span></div><button aria-label="Close upload dialog" onClick={onClose} type="button">X</button></div><form className="division-form" onSubmit={(event) => { event.preventDefault(); onClose(); }}><AttachmentUpload attachments={attachments} codes={codes} disabled={codesQuery.isLoading} onAdd={(files) => setAttachments((current) => [...current, ...files.map((file) => ({ file, documentCodeId: '' }))])} onDocumentCodeChange={(index, documentCodeId) => setAttachments((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, documentCodeId } : item))} onRemove={(index) => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} /><div className="division-form__actions"><button onClick={onClose} type="button">Cancel</button><button type="submit">Continue</button></div></form></section></div>;
+  return <div className="division-modal-backdrop" role="presentation"><section aria-modal="true" className="division-modal division-modal--wide" role="dialog"><div className="division-modal__head"><div><strong>Upload Document</strong><span>Select files and classify each attachment.</span></div><button aria-label="Close upload dialog" onClick={onClose} type="button">X</button></div><form className="division-form" onSubmit={(event) => { event.preventDefault(); onClose(); }}><AttachmentUpload attachments={attachments} codes={codes} disabled={codesQuery.isLoading} onAdd={(files) => setAttachments((current) => [...current, ...files.map(createPendingAttachment)])} onDocumentCodeChange={(id, documentCodeId) => setAttachments((current) => current.map((item) => item.id === id ? { ...item, documentCodeId } : item))} onRemove={(id) => setAttachments((current) => current.filter((item) => item.id !== id))} /><div className="division-form__actions"><button onClick={onClose} type="button">Cancel</button><button type="submit">Continue</button></div></form></section></div>;
 }
 
 function CriticalWork({ workRequests, loading }: { workRequests: WorkRequest[]; loading: boolean }) {
   const requests = [...workRequests].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()).slice(0, 5);
-  return <section className="dash-panel dash-critical-panel"><div className="dash-panel-head"><div><strong>Work Requests</strong></div></div><div className="dash-critical-table"><div className="dash-critical-row dash-critical-row--head"><span>Title</span><span>Type</span><span>Ship. No</span><span>Revision</span><span>Last Update</span><span>Status</span><span>Actions</span></div>{loading ? <p>Loading current work requests...</p> : requests.map((request) => <div className="dash-critical-row" key={request.id}><div><strong>{request.title}</strong><small>WR-{request.id.slice(0, 8).toUpperCase()}</small></div><span>{request.projectId ? 'Project' : request.bidId ? 'Bid' : 'General'}</span><span>{requestValue(request, 'shipmentNumber', 'shipmentNo') ?? '—'}</span><span>{requestValue(request, 'revision', 'revisionNumber') ?? '—'}</span><small>{formatDate(request.updatedAt)}</small><span><em>{request.currentState || '—'}</em></span><Link className="dash-critical-action" to={`/work-requests/${request.id}`}>Open</Link></div>)}{!loading && !requests.length ? <p>No work requests are available yet.</p> : null}</div></section>;
+  return <section className="dash-panel dash-critical-panel"><div className="dash-panel-head"><div><strong>Work Requests</strong></div></div><div className="dash-critical-table"><div className="dash-critical-row dash-critical-row--head"><span>Title</span><span>Type</span><span>Ship. No</span><span>Revision</span><span>Last Update</span><span>Status</span><span>Actions</span></div>{loading ? <p>Loading current work requests...</p> : requests.map((request) => <div className="dash-critical-row" key={request.id}><div><strong>{request.title}</strong><small>WR-{request.id.slice(0, 8).toUpperCase()}</small></div><span>{request.projectId ? 'Project' : request.bidId ? 'Bid' : 'General'}</span><span>{requestValue(request, 'shipmentNumber', 'shipmentNo') ?? '—'}</span><span>{requestValue(request, 'revision', 'revisionNumber') ?? '—'}</span><small>{formatDate(request.updatedAt)}</small><span><em>{request.currentState || '—'}</em></span><Link className="dash-critical-action" to={`/work-requests/${request.id}`}>View</Link></div>)}{!loading && !requests.length ? <p>No work requests are available yet.</p> : null}</div></section>;
 }
 
 function ActivityTrail({ bids, projects, workRequests }: { bids: Bid[]; projects: Project[]; workRequests: WorkRequest[] }) {

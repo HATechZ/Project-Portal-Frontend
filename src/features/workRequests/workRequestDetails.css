@@ -43,6 +43,15 @@
 .work-request-panel__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 60px; padding: 15px 18px; }
 .work-request-panel__header h2 { margin: 0; color: #061b36; font-size: 14px; font-weight: 800; letter-spacing: -.015em; }
 .work-request-panel__header p { margin: 4px 0 0; color: #718196; font-size: 11px; }
+.work-request-documents__add { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #0b91a8; border-radius: 8px; background: #1595af; color: #fff; padding: 8px 10px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.work-request-documents__add:hover { background: #087f96; }
+.work-request-documents__table { border-top: 1px solid #edf1f5; }
+.work-request-documents__table .attachment-table { border: 0; border-radius: 0; }
+.work-request-documents__empty { margin: 0; border-top: 1px solid #edf1f5; color: #718196; padding: 22px 18px; font-size: 12px; }
+.work-request-documents__view { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid #d9e4eb; border-radius: 6px; background: #fff; color: #357184; }
+.work-request-documents__view:hover { border-color: #90c7d0; background: #eefbfc; color: #087285; }
+.work-request-document-modal { max-height: min(780px, calc(100vh - 48px)); }
+.work-request-document-modal .division-form { max-height: calc(min(780px, 100vh - 48px) - 76px); overflow: auto; }
 .work-request-tracker { box-shadow: 0 1px 3px rgba(15, 35, 55, .08), 0 9px 22px rgba(15, 35, 55, .035); }
 .work-request-tracker .work-request-panel__header { min-height: 52px; padding: 15px 19px 2px; }
 .work-request-tracker .work-request-panel__header h2 { color: #8a9bb2; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
@@ -134,6 +143,7 @@
   .work-request-preview-card__controls { width: 100%; justify-content: flex-start; }
   .work-request-preview-card__controls select { max-width: 44%; }
   .work-request-preview-card__frame { min-height: 280px; }
+  .work-request-documents__add { padding: 7px 9px; }
 }
 
 @media (max-width: 480px) {

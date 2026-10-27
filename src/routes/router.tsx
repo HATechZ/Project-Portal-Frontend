@@ -5,6 +5,7 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { BidsPage } from '@/pages/BidsPage';
 import { DocumentsPage } from '@/pages/DocumentsPage';
 import { ProjectsPage } from '@/pages/ProjectsPage';
+import { WorkspaceDetailsPage } from '@/pages/WorkspaceDetailsPage';
 import { TasksPage } from '@/pages/TasksPage';
 import { WorkRequestsPage } from '@/pages/WorkRequestsPage';
 import { WorkRequestDetailsPage } from '@/pages/WorkRequestDetailsPage';
@@ -37,12 +38,20 @@ export const router = createBrowserRouter([
         element: <DashboardLayout><BidsPage /></DashboardLayout>,
       },
       {
+        path: 'bids/:id',
+        element: <DashboardLayout><WorkspaceDetailsPage kind="bid" /></DashboardLayout>,
+      },
+      {
         path: 'projects',
         element: (
           <DashboardLayout>
             <ProjectsPage />
           </DashboardLayout>
         ),
+      },
+      {
+        path: 'projects/:id',
+        element: <DashboardLayout><WorkspaceDetailsPage kind="project" /></DashboardLayout>,
       },
       {
         path: 'tasks',

@@ -21,11 +21,18 @@ export function stringValue(record: ApiRecord | null | undefined, keys: string[]
 }
 
 export function documentId(document: ApiRecord) {
-  return stringValue(document, ['id']);
+  return stringValue(document, ['id', 'documentId']);
 }
 
 export function documentLabel(document: ApiRecord) {
   return stringValue(document, ['originalFileName', 'generatedFileName', 'name', 'fileName', 'documentCode']) || 'Untitled document';
+}
+
+/** The server owns this timestamp; legacy projections may nest it in latestVersion. */
+export function documentLastUpdatedAt(document: ApiRecord) {
+  const direct = stringValue(document, ['lastUpdatedAt']);
+  if (direct) return direct;
+  return isRecord(document.latestVersion) ? stringValue(document.latestVersion, ['uploadedAt']) : null;
 }
 
 export function versionLabel(version: ApiRecord | null | undefined) {

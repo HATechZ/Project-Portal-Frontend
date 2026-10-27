@@ -1,6 +1,8 @@
 import { NavLink, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { BriefcaseBusiness } from 'lucide-react';
 import { navigationItems } from '@/routes/navigation';
+import { getWorkRequests } from '@/services/workRequestService';
 import { cx } from '@/utils/cx';
 
 type SidebarProps = {
@@ -11,6 +13,7 @@ type SidebarProps = {
 
 export function Sidebar({ collapsed, mobileOpen = false, onNavigate }: SidebarProps) {
   const location = useLocation();
+  const workRequestsQuery = useQuery({ queryKey: ['work-requests'], queryFn: getWorkRequests });
 
   function isCurrentItem(item: (typeof navigationItems)[number]) {
     const [path, hash = ''] = item.path.split('#');
@@ -33,12 +36,17 @@ export function Sidebar({ collapsed, mobileOpen = false, onNavigate }: SidebarPr
         )}
       </div>
       <nav className="sidebar-nav" aria-label="Main navigation">
-        {navigationItems.map((item) => item.disabled ? (
+        {navigationItems.map((item) => {
+          const count = item.label === 'Work Requests'
+            ? (workRequestsQuery.isLoading ? '…' : String(workRequestsQuery.data?.meta.total ?? 0))
+            : item.count;
+
+          return item.disabled ? (
           <span aria-disabled="true" className="nav-item nav-item--disabled" key={item.label} title="Reports are not available yet">
             <item.icon size={20} />
             {(!collapsed || mobileOpen) && <span>{item.label}</span>}
           </span>
-        ) : (
+          ) : (
           <NavLink
             key={item.label}
             to={item.path}
@@ -48,9 +56,10 @@ export function Sidebar({ collapsed, mobileOpen = false, onNavigate }: SidebarPr
           >
             <item.icon size={20} />
             {(!collapsed || mobileOpen) && <span>{item.label}</span>}
-            {(!collapsed || mobileOpen) && item.count ? <small>{item.count}</small> : null}
+            {(!collapsed || mobileOpen) && count !== undefined ? <small>{count}</small> : null}
           </NavLink>
-        ))}
+          );
+        })}
       </nav>
     </aside>
   );

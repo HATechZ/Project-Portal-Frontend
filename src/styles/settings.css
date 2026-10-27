@@ -154,7 +154,7 @@
 
 @media (max-width: 1024px) {
   .settings-configuration-panel .division-grid,
-  .settings-configuration-panel .role-grid { min-width: 820px; }
+  .settings-configuration-panel .role-grid { min-width: 720px; }
 }
 
 @media (max-width: 760px) {
@@ -168,3 +168,6 @@
   .settings-configuration-panel .dash-section-title > div { width: 100%; }
   .settings-configuration-panel .dash-section-title button { flex: 1 0 auto; }
 }
+
+/* Align Settings data grids with the portal-wide table and action language. */
+.settings-center .settings-configuration-panel { border-color: #dfe8ea; border-radius: 10px; box-shadow: 0 1px 2px rgba(16, 47, 57, .04); }.settings-center .settings-configuration-panel .dash-section-title { min-height: 58px; padding: 0 18px; }.settings-center .settings-configuration-panel .dash-section-title strong { color: #193d46; font-size: 14px; font-weight: 750; }.settings-center .settings-configuration-panel .dash-section-title span { color: #718289; font-size: 12px; }.settings-center .settings-configuration-panel .dash-section-title button { min-height: 34px; height: 34px; border: 1px solid #0b5262; border-radius: 6px; background: #0b5262; color: #fff; padding: 0 11px; font-size: 11px; font-weight: 750; }.settings-center .settings-configuration-panel .dash-section-title button:hover { border-color: #073f4b; background: #073f4b; color: #fff; }.settings-center .settings-configuration-panel .division-grid, .settings-center .settings-configuration-panel .role-grid { min-height: 58px; border-color: #e6edef; padding: 10px 18px; color: #40555d; font-size: 12px; line-height: 1.35; }.settings-center .settings-configuration-panel .role-grid { min-height: 58px; }.settings-center .settings-configuration-panel .division-grid--head, .settings-center .settings-configuration-panel .role-grid--head { min-height: 38px; background: #f1f5f6; color: #355762; font-size: 11px; font-weight: 800; letter-spacing: .045em; }.settings-center .settings-configuration-panel .division-grid strong, .settings-center .settings-configuration-panel .role-grid strong { color: #203d46; font-size: 12px; font-weight: 750; }.settings-center .settings-configuration-panel .role-grid small { color: #718289; font-size: 11px; }.settings-center .settings-configuration-panel .division-actions { gap: 6px; }.settings-center .settings-configuration-panel .division-actions button { min-height: 32px; height: 32px; border: 1px solid #cbdadd; border-radius: 6px; background: #fff; color: #075b65; padding: 0 10px; font-size: 11px; font-weight: 750; }.settings-center .settings-configuration-panel .division-actions button:hover:not(:disabled) { border-color: #78aeb4; background: #edf7f7; color: #074f59; }.settings-center .settings-configuration-panel .division-actions--destructive button:last-child { border-color: #d99ca0; color: #9c3038; }.settings-center .settings-configuration-panel .division-actions--destructive button:last-child:hover:not(:disabled) { border-color: #c57a80; background: #fff1f1; color: #872d35; }
