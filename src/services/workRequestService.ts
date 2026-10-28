@@ -15,6 +15,16 @@ export type WorkflowActionCode =
   | 'REQUEST_WORKFLOW_INFO'
   | 'RESPOND_WORKFLOW_INFO';
 
+export type RouteWorkflowActionCode =
+  | 'DEFINE_TEAM_SEQUENCE'
+  | 'DEFINE_MEMBER_SEQUENCE'
+  | 'APPEND_MEMBER_STEP'
+  | 'SUBMIT_MEMBER_STEP'
+  | 'COMPLETE_TEAM_STEP'
+  | 'FORWARD_ROUTE'
+  | 'SUBMIT_CLIENT_PACKAGE'
+  | 'REQUEST_WORKFLOW_INFO';
+
 export type WorkflowTargetKind =
   | 'division'
   | 'team'
@@ -25,9 +35,9 @@ export type WorkflowTargetKind =
   | 'info-response';
 
 export type AvailableWorkflowAction = {
-  code: WorkflowActionCode;
+  code: string;
   label: string;
-  targetKind: WorkflowTargetKind;
+  targetKind: string;
 };
 
 export type WorkRequestAssignment = {
@@ -99,6 +109,54 @@ export type CreateWorkRequestDocumentInput = {
   shipmentNumber?: string;
 };
 
+export type WorkRequestRouteStep = {
+  id: string;
+  ordinal: number;
+  kind: string;
+  divisionId: string | null;
+  activatedAt: string | null;
+  completedAt: string | null;
+};
+
+export type WorkRequestRouteProjection = {
+  routeVersionId: string | null;
+  routeStepId: string | null;
+  updatedAt: string;
+  divisionCycleId?: string | null;
+  teamStepId?: string | null;
+  memberStepId?: string | null;
+};
+
+export type WorkRequestRouteEvent = {
+  id: string;
+  action: string;
+  occurredAt: string;
+  routeStepId: string | null;
+  divisionCycleId: string | null;
+  teamStepId: string | null;
+  memberStepId: string | null;
+};
+
+export type WorkRequestRouteHistory = {
+  projection: WorkRequestRouteProjection | null;
+  steps: WorkRequestRouteStep[];
+  events?: WorkRequestRouteEvent[];
+};
+
+export type WorkRequestInternalCycle = {
+  id: string;
+  routeStep: { divisionId: string | null };
+  teamSteps: Array<{
+    id: string;
+    team: { id: string; name: string; leadMemberId: string | null };
+    memberSteps: Array<{ id: string; memberId: string; member: { id: string; name: string } }>;
+  }>;
+  availableActions: string[];
+};
+
+export type WorkRequestRouteRecipient = { id: string; label?: string; name?: string; email?: string };
+export type WorkRequestInfoRequest = { id: string; message: string; status: string; requestedAt: string; target: { actorId: string; type: string }; requester: { actorId: string; type: string } };
+
 export type CreateWorkRequestInput = {
   parentType: 'BID' | 'PROJECT';
   bidId?: string;
@@ -107,6 +165,7 @@ export type CreateWorkRequestInput = {
   priority: WorkRequestPriority;
   notes?: string;
   originatingDivisionId: string;
+  responsibleOriginatingDivisionLeadId?: string;
   intermediateDivisionIds: string[];
   documents: CreateWorkRequestDocumentInput[];
 };
@@ -221,6 +280,7 @@ export function createWorkRequest(input: CreateWorkRequestInput, requestId: stri
   const notes = input.notes?.trim();
   if (notes) formData.append('notes', notes);
   formData.append('originatingDivisionId', input.originatingDivisionId);
+  if (input.responsibleOriginatingDivisionLeadId) formData.append('responsibleOriginatingDivisionLeadId', input.responsibleOriginatingDivisionLeadId);
   input.intermediateDivisionIds.forEach((divisionId) => formData.append('intermediateDivisionIds', divisionId));
   input.documents.forEach(({ documentCodeId, file, description, shipmentNumber }) => {
     formData.append('documentCodeIds', documentCodeId);
@@ -277,6 +337,62 @@ export function getWorkRequestAvailableActions(id: string) {
   return apiClient<ApiResponse<AvailableWorkflowAction[]>>(`${requestPath(id)}/available-actions`).then((response) => response.data);
 }
 
+export function getWorkRequestRoute(id: string) {
+  return apiClient<ApiResponse<WorkRequestRouteHistory>>(`${requestPath(id)}/route`).then((response) => response.data);
+}
+
+export function getWorkRequestInternalHistory(id: string) {
+  return apiClient<ApiResponse<WorkRequestRouteHistory>>(`${requestPath(id)}/internal-history`).then((response) => response.data);
+}
+
+export function getWorkRequestInternalCycle(id: string, cycleId: string) {
+  return apiClient<ApiResponse<WorkRequestInternalCycle>>(`${requestPath(id)}/internal-cycles/${encodeURIComponent(cycleId)}`).then((response) => response.data);
+}
+
+export function defineWorkRequestTeamSequence(id: string, cycleId: string, teamIds: string[]) {
+  return apiClient<ApiResponse<WorkRequestInternalCycle>>(`${requestPath(id)}/division-cycles/${encodeURIComponent(cycleId)}/team-sequence`, { method: 'POST', body: JSON.stringify({ teamIds }) }).then((response) => response.data);
+}
+
+export function defineWorkRequestMemberSequence(id: string, teamStepId: string, memberIds: string[]) {
+  return apiClient<ApiResponse<WorkRequestInternalCycle>>(`${requestPath(id)}/team-steps/${encodeURIComponent(teamStepId)}/member-sequence`, { method: 'POST', body: JSON.stringify({ memberIds }) }).then((response) => response.data);
+}
+
+export function appendWorkRequestMemberStep(id: string, teamStepId: string, memberId: string) {
+  return apiClient<ApiResponse<WorkRequestInternalCycle>>(`${requestPath(id)}/team-steps/${encodeURIComponent(teamStepId)}/member-steps`, { method: 'POST', body: JSON.stringify({ memberId }) }).then((response) => response.data);
+}
+
+export function submitWorkRequestMemberStep(id: string, memberStepId: string) {
+  return apiClient<ApiResponse<WorkRequestInternalCycle>>(`${requestPath(id)}/member-steps/${encodeURIComponent(memberStepId)}/submit`, { method: 'POST' }).then((response) => response.data);
+}
+
+export function completeWorkRequestTeamStep(id: string, teamStepId: string) {
+  return apiClient<ApiResponse<WorkRequestInternalCycle>>(`${requestPath(id)}/team-steps/${encodeURIComponent(teamStepId)}/complete`, { method: 'POST' }).then((response) => response.data);
+}
+
+export function forwardWorkRequestRoute(id: string, routeStepId: string) {
+  return apiClient<ApiResponse<unknown>>(`${requestPath(id)}/route-steps/${encodeURIComponent(routeStepId)}/forward`, { method: 'POST' }).then((response) => response.data);
+}
+
+export function submitWorkRequestClientPackage(id: string, documentVersionIds: string[]) {
+  return apiClient<ApiResponse<unknown>>(`${requestPath(id)}/client-submissions`, { method: 'POST', body: JSON.stringify({ documentVersionIds }) }).then((response) => response.data);
+}
+
+export function getWorkRequestCommunicationRecipients(id: string) {
+  return apiClient<ApiResponse<WorkRequestRouteRecipient[]>>(`${requestPath(id)}/communication-recipients`).then((response) => response.data);
+}
+
+export function sendWorkRequestRouteMessage(id: string, recipientActorIds: string[], message: string, documentVersionIds?: string[]) {
+  return apiClient<ApiResponse<unknown>>(`${requestPath(id)}/conversations/messages`, { method: 'POST', body: JSON.stringify({ recipientActorIds, message, ...(documentVersionIds?.length ? { documentVersionIds } : {}) }) }).then((response) => response.data);
+}
+
+export function getWorkRequestInfoRequests(id: string) {
+  return apiClient<ApiResponse<WorkRequestInfoRequest[]>>(`${requestPath(id)}/info-requests`).then((response) => response.data);
+}
+
+export function respondToWorkRequestInfo(id: string, infoRequestId: string, message: string, documentVersionIds?: string[]) {
+  return apiClient<ApiResponse<unknown>>(`${requestPath(id)}/info-requests/${encodeURIComponent(infoRequestId)}/respond`, { method: 'POST', body: JSON.stringify({ message, ...(documentVersionIds?.length ? { documentVersionIds } : {}) }) }).then((response) => response.data);
+}
+
 function assignmentHeaders(requestId: string) {
   return { 'x-request-id': requestId };
 }
@@ -286,7 +402,7 @@ export function assignWorkRequestDivision(id: string, payload: AssignWorkRequest
     method: 'POST',
     headers: assignmentHeaders(requestId),
     body: JSON.stringify(payload),
-  }).then((response) => response.data);
+  });
 }
 
 export function assignWorkRequestTeam(id: string, payload: AssignWorkRequestTeamPayload, requestId: string) {
@@ -294,7 +410,7 @@ export function assignWorkRequestTeam(id: string, payload: AssignWorkRequestTeam
     method: 'POST',
     headers: assignmentHeaders(requestId),
     body: JSON.stringify(payload),
-  }).then((response) => response.data);
+  });
 }
 
 export function assignWorkRequestMember(id: string, payload: AssignWorkRequestMemberPayload, requestId: string) {
@@ -302,7 +418,7 @@ export function assignWorkRequestMember(id: string, payload: AssignWorkRequestMe
     method: 'POST',
     headers: assignmentHeaders(requestId),
     body: JSON.stringify(payload),
-  }).then((response) => response.data);
+  });
 }
 
 export function submitWorkRequest(id: string, payload: WorkRequestWorkflowNotePayload, requestId: string) {
@@ -310,7 +426,7 @@ export function submitWorkRequest(id: string, payload: WorkRequestWorkflowNotePa
     method: 'POST',
     headers: assignmentHeaders(requestId),
     body: JSON.stringify(payload),
-  }).then((response) => response.data);
+  });
 }
 
 export function applyWorkRequestWorkflowAction(id: string, payload: WorkRequestWorkflowActionPayload, requestId: string) {
@@ -318,5 +434,5 @@ export function applyWorkRequestWorkflowAction(id: string, payload: WorkRequestW
     method: 'POST',
     headers: assignmentHeaders(requestId),
     body: JSON.stringify(payload),
-  }).then((response) => response.data);
+  });
 }

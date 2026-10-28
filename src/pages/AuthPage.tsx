@@ -8,6 +8,7 @@ import { countries, getCountryShortName } from '@/constants/countries';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { ApiClientError } from '@/services/apiClient';
 import { login } from '@/services/authService';
+import { persistUser } from '@/services/authSession';
 import { getCompanyTypes, signupCompany } from '@/services/companyService';
 
 type AuthScreen = 'company-signup' | 'login' | 'set-password' | 'all';
@@ -365,7 +366,7 @@ function LoginScreen({ showReference = false }: { showReference?: boolean }) {
     onSuccess: (response) => {
       localStorage.setItem('accessToken', response.data.tokens.accessToken);
       localStorage.setItem('refreshToken', response.data.tokens.refreshToken);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
+      persistUser(response.data.user);
       toast.success(response.message || 'Login successful');
       navigate('/dashboard');
     },

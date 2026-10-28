@@ -26,9 +26,11 @@ import {
 import { getDesignations, type Designation } from '@/services/designationService';
 import { getBids, type Bid } from '@/services/bidService';
 import { getProjects, type Project } from '@/services/projectService';
+import { getClients } from '@/services/clientService';
 import { getWorkRequests, type WorkRequest } from '@/services/workRequestService';
 import { getGeneralDocumentCodes } from '@/services/generalDocumentCodeService';
 import { AttachmentUpload } from '@/components/ui/AttachmentUpload';
+import { usePermissions } from '@/hooks/usePermissions';
 import { createPendingAttachment, type PendingAttachment } from '@/components/ui/attachmentDraft';
 import { ArrowRight, BadgeCheck, Building2, ClipboardList, Clock3, FileCheck2, FilePlus2, FolderKanban, FolderOpen, Upload, Users, UsersRound } from 'lucide-react';
 
@@ -48,15 +50,15 @@ const emptyMemberForm: MemberForm = {
   name: '', email: '', password: '', roleId: '', divisionId: '', designationId: '', phone: '', isActive: true,
 };
 
-function MetricsStrip({ bids, projects, workRequests, members, loading }: {
-  bids: Bid[]; projects: Project[]; workRequests: WorkRequest[]; members: Member[]; loading: boolean;
+function MetricsStrip({ bids, projects, workRequests, members, loading, canViewBid, canViewProject, canViewWorkRequest, canViewMembers }: {
+  bids: Bid[]; projects: Project[]; workRequests: WorkRequest[]; members: Member[]; loading: boolean; canViewBid: boolean; canViewProject: boolean; canViewWorkRequest: boolean; canViewMembers: boolean;
 }) {
   const linkedDocuments = projects.reduce((total, project) => total + project.fileCount, 0) + bids.reduce((total, bid) => total + bid.fileCount, 0);
   const metrics = [
-    { label: 'Active engineering projects', value: projects.length, caption: 'Current project workspaces', icon: FolderKanban, tone: 'orange' },
-    { label: 'Active bids / proposals', value: bids.length, caption: 'Open bid workspaces', icon: FilePlus2, tone: 'green' },
-    { label: 'Pending reviews', value: workRequests.length, caption: 'Requests in the workflow', icon: Clock3, tone: 'blue' },
-    { label: 'Linked documents', value: linkedDocuments, caption: `${members.filter((member) => member.isActive).length} active team members`, icon: FileCheck2, tone: 'rose' },
+    ...(canViewProject ? [{ label: 'Active engineering projects', value: projects.length, caption: 'Current project workspaces', icon: FolderKanban, tone: 'orange' }] : []),
+    ...(canViewBid ? [{ label: 'Active bids / proposals', value: bids.length, caption: 'Open bid workspaces', icon: FilePlus2, tone: 'green' }] : []),
+    ...(canViewWorkRequest ? [{ label: 'Pending reviews', value: workRequests.length, caption: 'Requests in the workflow', icon: Clock3, tone: 'blue' }] : []),
+    ...(canViewMembers && (canViewBid || canViewProject) ? [{ label: 'Linked documents', value: linkedDocuments, caption: `${members.filter((member) => member.isActive).length} active team members`, icon: FileCheck2, tone: 'rose' }] : []),
   ];
 
   return (
@@ -73,18 +75,34 @@ function MetricsStrip({ bids, projects, workRequests, members, loading }: {
   );
 }
 
-function QuickAccess({ bids, projects, loading }: { bids: Bid[]; projects: Project[]; loading: boolean }) {
+function QuickAccess({ bids, projects, loading, clientNames, viewAllPath }: { bids: Bid[]; projects: Project[]; loading: boolean; clientNames: Map<string, string>; viewAllPath: string }) {
   const navigate = useNavigate();
   const workspaces = [
-    ...bids.map((bid) => ({ id: bid.id, name: bid.name, type: 'Bid', client: bid.projectCode || 'Bid workspace', status: bid.status || 'Active', updatedAt: bid.updatedAt })),
-    ...projects.map((project) => ({ id: project.id, name: project.name, type: 'Project', client: 'Project workspace', status: project.status || 'Active', updatedAt: project.updatedAt })),
-  ].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()).slice(0, 4);
-  return <section className="dash-panel dash-workspace-panel"><div className="dash-panel-head"><div><FolderOpen size={17} /><strong>Quick access workspaces</strong></div><span>Recently updated</span></div><div className="dash-workspace-grid">{loading ? <p>Loading workspaces...</p> : workspaces.length ? workspaces.map((workspace) => { const path = `/${workspace.type === 'Bid' ? 'bids' : 'projects'}/${workspace.id}`; return <article aria-label={`Open ${workspace.name}`} key={`${workspace.type}-${workspace.id}`} onClick={() => navigate(path)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(path); } }} role="link" tabIndex={0}><div className={`dash-workspace-icon dash-workspace-icon--${workspace.type.toLowerCase()}`}><FolderOpen size={18} /></div><div><strong>{workspace.name}</strong><small><em>{workspace.type}</em>{workspace.client} · {workspace.status}</small></div><ArrowRight size={17} /></article>; }) : <p>No project or bid workspaces are available yet.</p>}</div></section>;
+    ...bids.map((bid) => ({ id: bid.id, name: bid.name, type: 'Bid' as const, client: clientNameFromBid(bid, clientNames), status: bid.status, updatedAt: bid.updatedAt })),
+    ...projects.map((project) => ({ id: project.id, name: project.name, type: 'Project' as const, client: clientNames.get(project.clientId) ?? null, status: project.status, updatedAt: project.updatedAt })),
+  ].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()).slice(0, 6);
+  return <section className="dash-panel dash-workspace-panel"><div className="dash-panel-head"><div><FolderOpen size={17} /><strong>Quick Access Workspace Folders</strong></div><Link className="dash-workspace-view-all" to={viewAllPath}>View all</Link></div><div className="dash-workspace-grid">{loading ? <p>Loading workspaces...</p> : workspaces.length ? workspaces.map((workspace) => { const path = `/${workspace.type === 'Bid' ? 'bids' : 'projects'}/${workspace.id}`; return <article aria-label={`Open ${workspace.name}`} key={`${workspace.type}-${workspace.id}`} onClick={() => navigate(path)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(path); } }} role="link" tabIndex={0}><div className={`dash-workspace-icon dash-workspace-icon--${workspace.type.toLowerCase()}`}><FolderOpen size={18} /></div><div className="dash-workspace-copy"><div className="dash-workspace-title"><strong title={workspace.name}>{workspace.name}</strong><em>{workspace.type}</em></div><small><span title={workspace.client ?? undefined}>Client: <b>{workspace.client ?? '—'}</b></span><span title={workspace.status || undefined}>STATUS: <b>{workspace.status || '—'}</b></span></small></div><ArrowRight size={17} /></article>; }) : <p>No project or bid workspaces are available yet.</p>}</div></section>;
 }
 
-function QuickActions({ onBid, onProject, onWorkRequest, onUpload, onDivision, onMember, onTeam }: { onBid: () => void; onProject: () => void; onWorkRequest: () => void; onUpload: () => void; onDivision: () => void; onMember: () => void; onTeam: () => void }) {
-  const actions = [{ label: 'Create Bid', icon: FilePlus2, onClick: onBid }, { label: 'Create Project', icon: FolderKanban, onClick: onProject }, { label: 'Create Work Request', icon: ClipboardList, onClick: onWorkRequest }, { label: 'Upload Document', icon: Upload, onClick: onUpload }, { label: 'Create Division', icon: Building2, onClick: onDivision }, { label: 'Create Member', icon: Users, onClick: onMember }, { label: 'Create Team', icon: UsersRound, onClick: onTeam }];
-  return <section className="dash-panel dash-actions-panel"><div className="dash-panel-head"><div><BadgeCheck size={17} /><strong>Quick actions</strong></div></div><div className="dash-actions-grid">{actions.map((action) => <button key={action.label} onClick={action.onClick} type="button"><span><action.icon size={17} /></span>{action.label}</button>)}</div></section>;
+function clientNameFromBid(bid: Bid, clientNames: Map<string, string>) {
+  const embeddedClient = bid.client && typeof bid.client.name === 'string' ? bid.client.name : null;
+  return embeddedClient ?? clientNames.get(bid.clientId) ?? null;
+}
+
+function QuickActions({ can, onBid, onProject, onWorkRequest, onUpload, onDivision, onMember, onTeam, onWorkspaces, onWorkRequests, onDocuments }: { can: (permission: string) => boolean; onBid: () => void; onProject: () => void; onWorkRequest: () => void; onUpload: () => void; onDivision: () => void; onMember: () => void; onTeam: () => void; onWorkspaces: () => void; onWorkRequests: () => void; onDocuments: () => void }) {
+  const actions = [
+    { label: 'Create Bid', icon: FilePlus2, onClick: onBid, include: can('CREATE_BID') },
+    { label: 'Projects / Bids', icon: FolderOpen, onClick: onWorkspaces, include: can('VIEW_BID') || can('VIEW_PROJECT') },
+    { label: 'Create Project', icon: FolderKanban, onClick: onProject, include: can('CREATE_PROJECT') },
+    { label: 'Create Work Request', icon: ClipboardList, onClick: onWorkRequest, include: can('CREATE_WORK_REQUEST') },
+    { label: 'Work Requests', icon: ClipboardList, onClick: onWorkRequests, include: can('VIEW_WORK_REQUEST') },
+    { label: 'Documents', icon: FileCheck2, onClick: onDocuments, include: can('VIEW_DOCUMENT') },
+    { label: 'Upload Document', icon: Upload, onClick: onUpload, include: can('UPLOAD_DOCUMENT') },
+    { label: 'Create Division', icon: Building2, onClick: onDivision, include: can('CREATE_DIVISION') },
+    { label: 'Create Member', icon: Users, onClick: onMember, include: can('CREATE_MEMBER') },
+    { label: 'Create Team', icon: UsersRound, onClick: onTeam, include: can('CREATE_TEAM') },
+  ].filter((action) => action.include);
+  return <section className="dash-panel dash-actions-panel"><div className="dash-panel-head"><div><BadgeCheck size={17} /><strong>Quick actions</strong></div></div><div className={`dash-actions-grid${actions.length % 2 ? ' dash-actions-grid--odd' : ''}`}>{actions.map((action) => <button key={action.label} onClick={action.onClick} type="button"><span><action.icon size={17} /></span>{action.label}</button>)}</div></section>;
 }
 
 function UploadDocumentModal({ onClose }: { onClose: () => void }) {
@@ -222,8 +240,9 @@ function DivisionModal({
   );
 }
 
-export function DashboardWorkspace({ modalOnly = false, createType, createRequest = 0 }: { modalOnly?: boolean; createType?: 'division' | 'member' | 'bid' | 'project' | 'work-request' | 'team'; createRequest?: number }) {
+export function DashboardWorkspace({ modalOnly = false, createType, createRequest = 0, preselectedDivisionId }: { modalOnly?: boolean; createType?: 'division' | 'member' | 'bid' | 'project' | 'work-request' | 'team'; createRequest?: number; preselectedDivisionId?: string }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [isDivisionModalOpen, setIsDivisionModalOpen] = useState(false);
   const [editingDivision, setEditingDivision] = useState<Division | null>(null);
   const [divisionForm, setDivisionForm] = useState<DivisionPayload>(emptyDivisionForm);
@@ -236,28 +255,34 @@ export function DashboardWorkspace({ modalOnly = false, createType, createReques
   const [projectCreateRequest, setProjectCreateRequest] = useState(0);
   const [workRequestCreateRequest, setWorkRequestCreateRequest] = useState(0);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const { can } = usePermissions();
+  const canViewBid = can('VIEW_BID');
+  const canViewProject = can('VIEW_PROJECT');
+  const canViewWorkRequest = can('VIEW_WORK_REQUEST');
+  const canViewMembers = can('VIEW_MEMBERS');
 
   useEffect(() => {
     const create = modalOnly ? createType : new URLSearchParams(window.location.search).get('create');
     if (create === 'division') openCreateDivisionModal();
-    if (create === 'member') openCreateMemberModal();
+    if (create === 'member') openCreateMemberModal(preselectedDivisionId);
     if (create === 'bid') setBidCreateRequest((current) => current + 1);
     if (create === 'project') setProjectCreateRequest((current) => current + 1);
     if (create === 'work-request') setWorkRequestCreateRequest((current) => current + 1);
     if (create === 'team') setTeamCreateRequest((current) => current + 1);
     if (create && !modalOnly) window.history.replaceState(null, '', '/dashboard');
-  }, [createRequest, createType, modalOnly]);
+  }, [createRequest, createType, modalOnly, preselectedDivisionId]);
 
   const divisionsQuery = useQuery({
     queryKey: divisionsQueryKey,
-    queryFn: getDivisions,
+    queryFn: getDivisions, enabled: can('VIEW_DIVISIONS'),
   });
 
-  const membersQuery = useQuery({ queryKey: membersQueryKey, queryFn: getMembers });
-  const designationsQuery = useQuery({ queryKey: designationsQueryKey, queryFn: getDesignations });
-  const bidsQuery = useQuery({ queryKey: ['bids'], queryFn: getBids });
-  const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: getProjects });
-  const workRequestsQuery = useQuery({ queryKey: ['work-requests'], queryFn: getWorkRequests });
+  const membersQuery = useQuery({ queryKey: membersQueryKey, queryFn: getMembers, enabled: canViewMembers });
+  const designationsQuery = useQuery({ queryKey: designationsQueryKey, queryFn: getDesignations, enabled: can('VIEW_DESIGNATIONS') });
+  const bidsQuery = useQuery({ queryKey: ['bids'], queryFn: getBids, enabled: canViewBid });
+  const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: getProjects, enabled: canViewProject });
+  const workRequestsQuery = useQuery({ queryKey: ['work-requests'], queryFn: getWorkRequests, enabled: canViewWorkRequest });
+  const clientsQuery = useQuery({ queryKey: ['clients'], queryFn: getClients, enabled: can('VIEW_CLIENTS') && (canViewBid || canViewProject) });
 
   const divisions = useMemo(() => divisionsQuery.data?.items ?? [], [divisionsQuery.data]);
   const members = useMemo(() => membersQuery.data?.items ?? [], [membersQuery.data]);
@@ -265,6 +290,7 @@ export function DashboardWorkspace({ modalOnly = false, createType, createReques
   const bids = useMemo(() => bidsQuery.data?.items ?? [], [bidsQuery.data]);
   const projects = useMemo(() => projectsQuery.data?.items ?? [], [projectsQuery.data]);
   const workRequests = useMemo(() => workRequestsQuery.data?.items ?? [], [workRequestsQuery.data]);
+  const clientNames = useMemo(() => new Map((clientsQuery.data?.items ?? []).map((client) => [client.id, client.name])), [clientsQuery.data]);
 
   const saveDivisionMutation = useMutation({
     mutationFn: (payload: DivisionPayload) =>
@@ -329,9 +355,9 @@ export function DashboardWorkspace({ modalOnly = false, createType, createReques
     });
   }
 
-  function openCreateMemberModal() {
+  function openCreateMemberModal(divisionId = '') {
     setEditingMember(null);
-    setMemberForm(emptyMemberForm);
+    setMemberForm({ ...emptyMemberForm, divisionId });
     setMemberFieldErrors({});
     setIsMemberModalOpen(true);
   }
@@ -376,19 +402,19 @@ export function DashboardWorkspace({ modalOnly = false, createType, createReques
       {divisionsQuery.isError ? <div className="division-alert">{getApiErrorMessage(divisionsQuery.error)}</div> : null}
       {membersQuery.isError ? <div className="division-alert">{getApiErrorMessage(membersQuery.error)}</div> : null}
       {designationsQuery.isError ? <div className="division-alert">Unable to load designations. Member creation is unavailable until the list can be loaded.</div> : null}
-      <MetricsStrip bids={bids} loading={bidsQuery.isLoading || projectsQuery.isLoading || workRequestsQuery.isLoading || membersQuery.isLoading} members={members} projects={projects} workRequests={workRequests} />
+      <MetricsStrip bids={bids} canViewBid={canViewBid} canViewMembers={canViewMembers} canViewProject={canViewProject} canViewWorkRequest={canViewWorkRequest} loading={bidsQuery.isLoading || projectsQuery.isLoading || workRequestsQuery.isLoading || membersQuery.isLoading} members={members} projects={projects} workRequests={workRequests} />
       <div className="dash-top-grid">
-        <QuickAccess bids={bids} loading={bidsQuery.isLoading || projectsQuery.isLoading} projects={projects} />
-        <QuickActions onBid={() => setBidCreateRequest((current) => current + 1)} onDivision={openCreateDivisionModal} onMember={openCreateMemberModal} onProject={() => setProjectCreateRequest((current) => current + 1)} onTeam={() => setTeamCreateRequest((current) => current + 1)} onUpload={() => setIsUploadModalOpen(true)} onWorkRequest={() => setWorkRequestCreateRequest((current) => current + 1)} />
+        {canViewBid || canViewProject ? <QuickAccess bids={bids} clientNames={clientNames} loading={bidsQuery.isLoading || projectsQuery.isLoading || clientsQuery.isLoading} projects={projects} viewAllPath={canViewBid ? '/bids' : '/projects'} /> : null}
+        <QuickActions can={can} onBid={() => setBidCreateRequest((current) => current + 1)} onDivision={openCreateDivisionModal} onDocuments={() => navigate('/documents')} onMember={openCreateMemberModal} onProject={() => setProjectCreateRequest((current) => current + 1)} onTeam={() => setTeamCreateRequest((current) => current + 1)} onUpload={() => setIsUploadModalOpen(true)} onWorkRequest={() => setWorkRequestCreateRequest((current) => current + 1)} onWorkRequests={() => navigate('/work-requests')} onWorkspaces={() => navigate(canViewBid ? '/bids' : '/projects')} />
       </div>
       <div className="dash-bottom-grid">
-        <CriticalWork loading={workRequestsQuery.isLoading} workRequests={workRequests} />
-        <ActivityTrail bids={bids} projects={projects} workRequests={workRequests} />
+        {canViewWorkRequest ? <CriticalWork loading={workRequestsQuery.isLoading} workRequests={workRequests} /> : null}
+        {canViewBid || canViewProject || canViewWorkRequest ? <ActivityTrail bids={bids} projects={projects} workRequests={workRequests} /> : null}
       </div>
-      <BidsPanel createRequest={bidCreateRequest} modalOnly />
-      <ProjectsPanel createRequest={projectCreateRequest} modalOnly />
-      <WorkRequestsPage createRequest={workRequestCreateRequest} embedded modalOnly />
-      <TeamPage createRequest={teamCreateRequest} embedded modalOnly />
+      {canViewBid || can('CREATE_BID') ? <BidsPanel createRequest={bidCreateRequest} modalOnly /> : null}
+      {canViewProject || can('CREATE_PROJECT') ? <ProjectsPanel createRequest={projectCreateRequest} modalOnly /> : null}
+      {canViewWorkRequest || can('CREATE_WORK_REQUEST') ? <WorkRequestsPage createRequest={workRequestCreateRequest} embedded modalOnly /> : null}
+      {can('VIEW_TEAMS') || can('CREATE_TEAM') ? <TeamPage createRequest={teamCreateRequest} embedded modalOnly /> : null}
       {isUploadModalOpen ? <UploadDocumentModal onClose={() => setIsUploadModalOpen(false)} /> : null}
       {isDivisionModalOpen ? (
         <DivisionModal

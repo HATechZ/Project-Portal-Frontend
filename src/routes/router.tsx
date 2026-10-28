@@ -13,6 +13,7 @@ import { TeamPage } from '@/pages/TeamPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
+import { PermissionRoute } from '@/routes/PermissionRoute';
 
 export const router = createBrowserRouter([
   {
@@ -35,23 +36,23 @@ export const router = createBrowserRouter([
       },
       {
         path: 'bids',
-        element: <DashboardLayout><BidsPage /></DashboardLayout>,
+        element: <PermissionRoute permissions={['VIEW_BID']}><DashboardLayout><BidsPage /></DashboardLayout></PermissionRoute>,
       },
       {
         path: 'bids/:id',
-        element: <DashboardLayout><WorkspaceDetailsPage kind="bid" /></DashboardLayout>,
+        element: <PermissionRoute permissions={['VIEW_BID']}><DashboardLayout><WorkspaceDetailsPage kind="bid" /></DashboardLayout></PermissionRoute>,
       },
       {
         path: 'projects',
         element: (
-          <DashboardLayout>
+          <PermissionRoute permissions={['VIEW_PROJECT']}><DashboardLayout>
             <ProjectsPage />
-          </DashboardLayout>
+          </DashboardLayout></PermissionRoute>
         ),
       },
       {
         path: 'projects/:id',
-        element: <DashboardLayout><WorkspaceDetailsPage kind="project" /></DashboardLayout>,
+        element: <PermissionRoute permissions={['VIEW_PROJECT']}><DashboardLayout><WorkspaceDetailsPage kind="project" /></DashboardLayout></PermissionRoute>,
       },
       {
         path: 'tasks',
@@ -64,41 +65,41 @@ export const router = createBrowserRouter([
       {
         path: 'work-requests',
         element: (
-          <DashboardLayout>
+          <PermissionRoute permissions={['VIEW_WORK_REQUEST']}><DashboardLayout>
             <WorkRequestsPage />
-          </DashboardLayout>
+          </DashboardLayout></PermissionRoute>
         ),
       },
       {
         path: 'work-requests/:id',
         element: (
-          <DashboardLayout>
+          <PermissionRoute permissions={['VIEW_WORK_REQUEST']}><DashboardLayout>
             <WorkRequestDetailsPage />
-          </DashboardLayout>
+          </DashboardLayout></PermissionRoute>
         ),
       },
       {
         path: 'documents',
-        element: <DashboardLayout><DocumentsPage /></DashboardLayout>,
+        element: <PermissionRoute permissions={['VIEW_DOCUMENT']}><DashboardLayout><DocumentsPage /></DashboardLayout></PermissionRoute>,
       },
       {
         path: 'organization',
-        element: <DashboardLayout><TeamPage /></DashboardLayout>,
+        element: <PermissionRoute permissions={['VIEW_DIVISIONS', 'VIEW_MEMBERS', 'VIEW_TEAMS']}><DashboardLayout><TeamPage /></DashboardLayout></PermissionRoute>,
       },
       {
         path: 'team',
         element: (
-          <DashboardLayout>
+          <PermissionRoute permissions={['VIEW_DIVISIONS', 'VIEW_MEMBERS', 'VIEW_TEAMS']}><DashboardLayout>
             <TeamPage />
-          </DashboardLayout>
+          </DashboardLayout></PermissionRoute>
         ),
       },
       {
         path: 'settings',
         element: (
-          <DashboardLayout>
+          <PermissionRoute permissions={['VIEW_SETTINGS']}><DashboardLayout>
             <SettingsPage />
-          </DashboardLayout>
+          </DashboardLayout></PermissionRoute>
         ),
       },
       { path: '*', element: <NotFoundPage /> },

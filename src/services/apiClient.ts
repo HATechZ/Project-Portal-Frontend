@@ -1,3 +1,5 @@
+import { clearStoredUser } from '@/services/authSession';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 type RefreshedTokens = {
@@ -29,7 +31,7 @@ export class ApiClientError extends Error {
 function clearSessionTokens() {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
-  localStorage.removeItem('user');
+  clearStoredUser();
 }
 
 function requestTokenRefresh(refreshToken: string) {

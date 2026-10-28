@@ -5,16 +5,18 @@ import { LoadingState } from '@/components/ui/LoadingState';
 import { getBids } from '@/services/bidService';
 import { getProjects } from '@/services/projectService';
 import { getWorkRequests } from '@/services/workRequestService';
+import { usePermissions } from '@/hooks/usePermissions';
 
 type DocumentRow = { id: string; name: string; source: 'Bid' | 'Project' | 'Work Request'; parent: string; codeId?: string };
 
 export function DocumentsPage() {
+  const { can } = usePermissions();
   usePageTitle('Documents');
   const [search, setSearch] = useState('');
   const [source, setSource] = useState<'all' | DocumentRow['source']>('all');
-  const bidsQuery = useQuery({ queryKey: ['bids'], queryFn: getBids });
-  const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: getProjects });
-  const workRequestsQuery = useQuery({ queryKey: ['work-requests'], queryFn: getWorkRequests });
+  const bidsQuery = useQuery({ queryKey: ['bids'], queryFn: getBids, enabled: can('VIEW_BID') });
+  const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: getProjects, enabled: can('VIEW_PROJECT') });
+  const workRequestsQuery = useQuery({ queryKey: ['work-requests'], queryFn: getWorkRequests, enabled: can('VIEW_WORK_REQUEST') });
   const loading = bidsQuery.isLoading || projectsQuery.isLoading || workRequestsQuery.isLoading;
   const hasError = bidsQuery.isError || projectsQuery.isError || workRequestsQuery.isError;
   const documents = useMemo<DocumentRow[]>(() => [

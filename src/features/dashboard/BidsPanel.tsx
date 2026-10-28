@@ -13,6 +13,7 @@ import { readableApiError } from '@/services/roleService';
 import { AttachmentUpload } from '@/components/ui/AttachmentUpload';
 import { createPendingAttachment, type PendingAttachment } from '@/components/ui/attachmentDraft';
 import { formatDateTime } from '@/features/workRequests/workflowPresentation';
+import { usePermissions } from '@/hooks/usePermissions';
 
 type Option = { id: string; name: string; code?: string };
 type BidForm = CreateBidPayload;
@@ -22,24 +23,27 @@ const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const fileAccept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.dwg,.dxf,.jpg,.jpeg,.png,.zip';
 
 export function BidsPanel({ createRequest = 0, modalOnly = false, filterText = '' }: { createRequest?: number; modalOnly?: boolean; filterText?: string }) {
+  const { can } = usePermissions();
+  const canViewBids = can('VIEW_BID');
+  const canCreateBids = can('CREATE_BID');
   const queryClient = useQueryClient();
   const [modal, setModal] = useState<'create' | 'edit' | 'documents' | null>(null);
   const [selected, setSelected] = useState<Bid | null>(null);
   const [form, setForm] = useState<BidForm>(emptyForm);
   const [documentCodes, setDocumentCodes] = useState<Record<string, string>>({});
   const [pendingDocuments, setPendingDocuments] = useState<PendingAttachment[]>([]);
-  const bidsQuery = useQuery({ queryKey: ['bids'], queryFn: getBids });
-  const detailQuery = useQuery({ queryKey: ['bids', selected?.id], queryFn: () => getBid(selected!.id), enabled: Boolean(selected) && modal !== 'create' });
-  const clientsQuery = useQuery({ queryKey: ['clients'], queryFn: getClients, enabled: modal === 'create' });
-  const polQuery = useQuery({ queryKey: ['pol-codes'], queryFn: getPolCodes, enabled: modal === 'create' });
-  const podQuery = useQuery({ queryKey: ['pod-codes'], queryFn: getPodCodes, enabled: modal === 'create' });
-  const cargoQuery = useQuery({ queryKey: ['cargo-codes'], queryFn: getCargoCodes, enabled: modal === 'create' });
-  const vesselQuery = useQuery({ queryKey: ['vessel-codes'], queryFn: getVesselCodes, enabled: modal === 'create' });
-  const documentCodeQuery = useQuery({ queryKey: ['marketing-document-codes'], queryFn: getMarketingDocumentCodes, enabled: modal === 'create' || modal === 'documents' });
+  const bidsQuery = useQuery({ queryKey: ['bids'], queryFn: getBids, enabled: canViewBids });
+  const detailQuery = useQuery({ queryKey: ['bids', selected?.id], queryFn: () => getBid(selected!.id), enabled: canViewBids && Boolean(selected) && modal !== 'create' });
+  const clientsQuery = useQuery({ queryKey: ['clients'], queryFn: getClients, enabled: canCreateBids && modal === 'create' && can('VIEW_CLIENTS') });
+  const polQuery = useQuery({ queryKey: ['pol-codes'], queryFn: getPolCodes, enabled: canCreateBids && modal === 'create' && can('VIEW_REFERENCE_DATA') });
+  const podQuery = useQuery({ queryKey: ['pod-codes'], queryFn: getPodCodes, enabled: canCreateBids && modal === 'create' && can('VIEW_REFERENCE_DATA') });
+  const cargoQuery = useQuery({ queryKey: ['cargo-codes'], queryFn: getCargoCodes, enabled: canCreateBids && modal === 'create' && can('VIEW_REFERENCE_DATA') });
+  const vesselQuery = useQuery({ queryKey: ['vessel-codes'], queryFn: getVesselCodes, enabled: canCreateBids && modal === 'create' && can('VIEW_REFERENCE_DATA') });
+  const documentCodeQuery = useQuery({ queryKey: ['marketing-document-codes'], queryFn: getMarketingDocumentCodes, enabled: ((modal === 'create' && canCreateBids) || modal === 'documents') && can('VIEW_DOCUMENT_CODES') });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['bids'] });
   const close = () => { setModal(null); setSelected(null); setForm(emptyForm); setDocumentCodes({}); setPendingDocuments([]); };
 
-  useEffect(() => { if (createRequest) openCreate(); }, [createRequest]);
+  useEffect(() => { if (createRequest && canCreateBids) { setSelected(null); setForm(emptyForm); setModal('create'); } }, [createRequest, canCreateBids]);
   useEffect(() => { if (modal === 'documents' && detailQuery.data) setDocumentCodes(Object.fromEntries(detailQuery.data.documents.map((item) => [item.id, item.documentCodeId]))); }, [modal, detailQuery.data]);
 
   const createMutation = useMutation({ mutationFn: createBid, onSuccess: () => { toast.success('Bid created successfully.'); void refresh(); close(); }, onError: showBidError });
@@ -47,7 +51,7 @@ export function BidsPanel({ createRequest = 0, modalOnly = false, filterText = '
   const documentMutation = useMutation({ mutationFn: ({ documentId, documentCodeId }: { documentId: string; documentCodeId: string }) => updateBidDocumentCode(selected!.id, documentId, documentCodeId), onSuccess: () => { toast.success('Document code updated.'); void refresh(); void detailQuery.refetch(); }, onError: (error) => toast.error(readableApiError(error, 'Unable to update document code.')) });
   const uploadDocumentsMutation = useMutation({ mutationFn: (attachments: CreateBidPayload['attachments']) => uploadBidDocuments(selected!.id, attachments), onSuccess: () => { toast.success('Documents uploaded successfully.'); setPendingDocuments([]); void refresh(); void detailQuery.refetch(); }, onError: (error) => toast.error(readableApiError(error, 'Unable to upload documents.')) });
 
-  function openCreate() { setSelected(null); setForm(emptyForm); setModal('create'); }
+  function openCreate() { if (!canCreateBids) return; setSelected(null); setForm(emptyForm); setModal('create'); }
   function setField(field: keyof Omit<BidForm, 'attachments'>, value: string) { setForm((current) => ({ ...current, [field]: value })); }
   function setFiles(action: { type: 'add'; files: File[] } | { type: 'remove'; id: string }) { setForm((current) => action.type === 'add' ? ({ ...current, attachments: [...current.attachments, ...action.files.map(createPendingAttachment)] }) : ({ ...current, attachments: current.attachments.filter((attachment) => attachment.id !== action.id) })); }
   function submitCreate(event: FormEvent<HTMLFormElement>) {

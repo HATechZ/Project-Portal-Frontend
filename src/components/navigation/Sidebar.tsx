@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { BriefcaseBusiness } from 'lucide-react';
 import { navigationItems } from '@/routes/navigation';
 import { getWorkRequests } from '@/services/workRequestService';
+import { usePermissions } from '@/hooks/usePermissions';
 import { cx } from '@/utils/cx';
 
 type SidebarProps = {
@@ -13,7 +14,9 @@ type SidebarProps = {
 
 export function Sidebar({ collapsed, mobileOpen = false, onNavigate }: SidebarProps) {
   const location = useLocation();
-  const workRequestsQuery = useQuery({ queryKey: ['work-requests'], queryFn: getWorkRequests });
+  const { can, canAny } = usePermissions();
+  const visibleItems = navigationItems.filter((item) => canAccessNavigation(item.path, can, canAny));
+  const workRequestsQuery = useQuery({ queryKey: ['work-requests'], queryFn: getWorkRequests, enabled: can('VIEW_WORK_REQUEST') });
 
   function isCurrentItem(item: (typeof navigationItems)[number]) {
     const [path, hash = ''] = item.path.split('#');
@@ -36,7 +39,7 @@ export function Sidebar({ collapsed, mobileOpen = false, onNavigate }: SidebarPr
         )}
       </div>
       <nav className="sidebar-nav" aria-label="Main navigation">
-        {navigationItems.map((item) => {
+        {visibleItems.map((item) => {
           const count = item.label === 'Work Requests'
             ? (workRequestsQuery.isLoading ? '…' : String(workRequestsQuery.data?.meta.total ?? 0))
             : item.count;
@@ -63,4 +66,19 @@ export function Sidebar({ collapsed, mobileOpen = false, onNavigate }: SidebarPr
       </nav>
     </aside>
   );
+}
+
+function canAccessNavigation(path: string, can: (permission: string) => boolean, canAny: (permissions: readonly string[]) => boolean) {
+  if (path === '/dashboard') return true;
+  if (path === '/bids') return can('VIEW_BID');
+  if (path === '/projects') return can('VIEW_PROJECT');
+  if (path === '/work-requests') return can('VIEW_WORK_REQUEST');
+  if (path === '/documents') return can('VIEW_DOCUMENT');
+  if (path === '/organization' || path === '/team') return canAny(['VIEW_MEMBERS', 'VIEW_DIVISIONS']);
+  if (path === '/settings') return can('VIEW_SETTINGS');
+  return itemIsPublicOrDisabled(path);
+}
+
+function itemIsPublicOrDisabled(path: string) {
+  return path === '/reports';
 }

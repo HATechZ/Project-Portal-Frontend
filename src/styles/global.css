@@ -498,29 +498,35 @@ body {
 .dash-panel-head strong { font-size: 14px; font-weight: 800; letter-spacing: -.015em; }
 .dash-panel-head svg { color: #f28b20; }
 .dash-panel-head > span { border-radius: 4px; background: #f2f6fa; color: #526b87; padding: 5px 9px; font-size: 10px; font-weight: 750; text-transform: uppercase; }
-.dash-workspace-panel { display: flex; min-height: 268px; flex-direction: column; }
-.dash-workspace-grid { display: grid; flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(72px, 1fr)); gap: 8px; padding: 12px; }
+.dash-workspace-panel, .dash-actions-panel { min-height: 318px; }
+.dash-workspace-panel { display: flex; flex-direction: column; }
+.dash-workspace-grid { display: grid; flex: 1; grid-auto-rows: 86px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 8px; padding: 12px; }
 .dash-workspace-grid > p { grid-column: 1 / -1; margin: 8px; color: #74849a; font-size: 13px; }
-.dash-workspace-grid article { display: grid; grid-template-columns: 36px minmax(0, 1fr) 18px; align-items: center; gap: 12px; min-height: 72px; border: 1px solid #dfe8f0; border-radius: 11px; padding: 9px 11px; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
+.dash-workspace-grid article { display: grid; grid-template-columns: 36px minmax(0, 1fr) 18px; align-items: center; gap: 12px; min-height: 86px; border: 1px solid #dfe8f0; border-radius: 11px; padding: 10px 11px; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
 .dash-workspace-grid article:hover { transform: translateY(-1px); border-color: #9dcdd0; background: #f9fdfd; }
 .dash-workspace-grid article > svg { color: #8ca2b8; }
 .dash-workspace-grid article:focus-visible { outline: 2px solid #0b6670; outline-offset: 2px; }
 .dash-workspace-grid article > div:nth-child(2) { min-width: 0; }
-.dash-workspace-grid strong, .dash-workspace-grid small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dash-workspace-grid strong { color: #071a33; font-size: 12px; font-weight: 800; }
-.dash-workspace-grid small { margin-top: 6px; color: #55708c; font-size: 10px; }
-.dash-workspace-grid em { display: inline-block; margin-right: 6px; border-radius: 999px; background: #dff9ed; color: #039862; padding: 3px 7px; font-size: 9px; font-style: normal; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.dash-workspace-copy { min-width: 0; }
+.dash-workspace-title { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.dash-workspace-grid strong { min-width: 0; overflow: hidden; color: #071a33; font-size: 12px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.dash-workspace-grid em { flex: none; border-radius: 999px; background: #dff9ed; color: #039862; padding: 3px 7px; font-size: 9px; font-style: normal; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.dash-workspace-grid small { display: flex; min-width: 0; gap: 10px; margin-top: 7px; color: #55708c; font-size: 10px; }
+.dash-workspace-grid small span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-workspace-grid small b { color: #38546d; font-weight: 750; }
 .dash-workspace-icon { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 10px; }
 .dash-workspace-icon--bid { background: #dcfaeb; color: #079d68; }
 .dash-workspace-icon--project { background: #fff3d4; color: #df8500; }
 .dash-workspace-icon--project + div em { background: #fff1c9; color: #d57c00; }
+.dash-workspace-view-all { color: #075b65; font-size: 11px; font-weight: 750; text-decoration: none; }
+.dash-workspace-view-all:hover { color: #043f49; text-decoration: underline; }
 
-.dash-actions-panel { min-height: 0; padding-bottom: 12px; }
+.dash-actions-panel { padding-bottom: 12px; }
 .dash-actions-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px 12px 0; }
 .dash-actions-grid button { display: flex; align-items: center; gap: 9px; min-height: 42px; border: 1px solid #d7e1ea; border-radius: 11px; background: #fff; color: #061b36; padding: 6px 10px; text-align: left; font-size: 11px; font-weight: 750; line-height: 1.1; }
 .dash-actions-grid button:hover { border-color: #8bcbd3; background: #f4fbfb; color: #075b68; }
 .dash-actions-grid button span { display: grid; flex: 0 0 auto; width: 30px; height: 30px; place-items: center; border-radius: 9px; background: #e9f5fb; color: #2580b7; }
-.dash-actions-grid button:last-child { grid-column: 1 / -1; }
+.dash-actions-grid--odd button:last-child { grid-column: 1 / -1; }
 
 .dash-critical-panel { overflow: hidden; }
 .dash-critical-table { overflow-x: auto; }
@@ -548,7 +554,6 @@ body {
 
 @media (max-width: 1120px) {
   .dash-page .dash-top-grid, .dash-page .dash-bottom-grid { grid-template-columns: 1fr; }
-  .dash-actions-panel { min-height: auto; }
 }
 @media (max-width: 640px) {
   .dash-page .dash-metrics { gap: 10px; }
@@ -560,7 +565,7 @@ body {
   .dash-actions-grid { gap: 7px; padding: 10px; }
   .dash-actions-grid button { min-height: 55px; padding: 7px; font-size: 10px; }
   .dash-actions-grid button span { width: 28px; height: 28px; }
-  .dash-actions-grid button:last-child { grid-column: auto; }
+  .dash-actions-grid--odd button:last-child { grid-column: 1 / -1; }
   .dash-panel-head { min-height: 50px; padding: 0 12px; }
   .dash-panel-head strong { font-size: 13px; }
 }
@@ -4022,6 +4027,105 @@ th {
   cursor: pointer;
 }
 
+/* User access uses the same restrained surface, controls and action treatment as
+   the settings tables while retaining its API-driven role assignment flow. */
+.division-modal.role-modal {
+  width: min(820px, 100%);
+  max-height: min(720px, calc(100dvh - 48px));
+  overflow: hidden;
+}
+
+.role-modal .division-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+  padding: 20px 22px 0;
+}
+
+.role-modal .division-form > label:first-child,
+.role-modal .division-form > .role-form-error,
+.role-modal .division-form > p,
+.role-modal .division-form > .division-form__actions {
+  grid-column: 1 / -1;
+}
+
+.role-modal .division-form > label:first-child {
+  padding-bottom: 15px;
+  border-bottom: 1px solid #e1e9ec;
+}
+
+.role-modal .role-assignment {
+  min-width: 0;
+  gap: 8px;
+  border: 1px solid #dce6e9;
+  border-radius: 10px;
+  background: #fbfcfd;
+  padding: 12px;
+}
+
+.role-modal .role-assignment > strong {
+  color: #1e4753;
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.role-modal .role-assignment__row {
+  min-height: 54px;
+  border-color: #e0e8eb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 9px 10px;
+}
+
+.role-modal .role-assignment__row strong {
+  color: #223f49;
+  font-size: 12px;
+}
+
+.role-modal .role-assignment__row small {
+  color: #69808a;
+  font-size: 10px;
+}
+
+.role-modal .role-assignment__row button {
+  min-width: 66px;
+  border-color: #a9c2c8;
+  border-radius: 7px;
+  background: #f6fbfb;
+  color: #0b5966;
+  transition: background .16s ease, border-color .16s ease, color .16s ease;
+}
+
+.role-modal .role-assignment:first-of-type .role-assignment__row button {
+  border-color: #e6b7b2;
+  background: #fffafa;
+  color: #a3362d;
+}
+
+.role-modal .role-assignment__row button:hover:not(:disabled) {
+  border-color: #498a94;
+  background: #eaf7f7;
+  color: #064b57;
+}
+
+.role-modal .role-assignment:first-of-type .role-assignment__row button:hover:not(:disabled) {
+  border-color: #cf746b;
+  background: #fff1f0;
+  color: #852b24;
+}
+
+.role-modal .division-form__actions {
+  margin: 0 -22px;
+  padding: 15px 22px;
+}
+
+@media (max-width: 700px) {
+  .division-modal.role-modal { max-height: calc(100dvh - 20px); }
+  .role-modal .division-form { grid-template-columns: 1fr; padding: 16px 16px 0; }
+  .role-modal .division-form__actions { margin: 0 -16px; padding: 13px 16px; }
+}
+
 @media (max-width: 760px) {
   .role-grid { grid-template-columns: minmax(150px, 1fr) 90px 100px; }
   .role-grid > :nth-child(3) { display: none; }
@@ -5713,7 +5817,6 @@ button:disabled:hover, button:disabled { cursor: not-allowed; }
 .page-content { overflow-x: hidden; }
 @media (max-width: 1360px) and (min-width: 761px) {
   .dash-page .dash-top-grid, .dash-page .dash-bottom-grid { grid-template-columns: 1fr; }
-  .dash-page .dash-actions-panel { min-height: auto; }
   .dash-page .dash-critical-row { min-width: 860px; }
 }
 @media (min-width: 1361px) {
@@ -5806,7 +5909,7 @@ button:disabled:hover, button:disabled { cursor: not-allowed; }
 .permission-workspace { border-color: #d9e4e7; border-radius: 12px; box-shadow: 0 20px 58px rgba(10, 36, 45, .22); }.permission-workspace__header { border-bottom-color: #e3eaed; background: #fff; }.permission-workspace__header h2 { color: #173d48; font-size: 16px; }.permission-workspace__header p { color: #74858d; font-size: 10px; }.permission-workspace__header strong { display: inline-block; margin-top: 4px; border-radius: 0; background: transparent; padding: 0; color: #0d6171; font-size: 10px; }.permission-workspace__categories { border-right-color: #e3eaed; background: #fafcfc; }.permission-workspace__categories h3, .permission-workspace__active > header, .permission-workspace__selected > header { border-color: #edf1f3; background: transparent; }.permission-workspace__categories button { border-radius: 5px; color: #405b64; font-size: 11px; }.permission-workspace__categories button:hover:not(:disabled) { background: #eef7f8; color: #0b596b; }.permission-workspace__categories button.is-active { border-left-color: #0b778b; background: #e7f6f7; color: #075a6a; box-shadow: none; }.permission-workspace__active { border-right-color: #e3eaed; }.permission-workspace__search { height: 36px; border-color: #d9e4e7; border-radius: 6px; background: #fafcfc; box-shadow: none; }.permission-workspace__search:focus-within { border-color: #d9e4e7; box-shadow: none; }.permission-workspace__search input { font-size: 11px; }.permission-workspace__permission-grid label { min-height: 38px; border-color: #dce6e9; border-radius: 7px; color: #38535c; font-size: 11px; }.permission-workspace__permission-grid label:hover { border-color: #86b7c0; background: #f4fbfb; }.permission-workspace__permission-grid label.is-selected { border-color: #73adba; background: #eaf7f8; color: #075a6a; }.permission-workspace__selected { background: #fbfcfc; }.permission-workspace__selected section button { border-color: #cde0e5; background: #f3fafb; color: #155b6d; font-size: 10px; }.permission-workspace__selected section button:hover { border-color: #cde0e5; background: #f3fafb; color: #155b6d; }.permission-workspace__form > footer { border-top-color: #dbe4e7; background: #fff; }.permission-workspace__form > footer button { border-color: #9aaeb5; border-radius: 6px; color: #24454f; font-size: 11px; }.permission-workspace__form > footer button:last-child { border-color: #0b5262; background: #0b5262; }.permission-workspace__form > footer button:last-child:hover:not(:disabled) { border-color: #0b5262; background: #0b5262; }
 
 /* Full-width data grids: use the whole panel on desktop and scroll only when columns truly need it. */
-.settings-workspace-table, .dash-page .division-table, .work-requests-panel .division-table, .team-dashboard .division-table, .resource-page .division-table { width: 100%; overflow-x: auto; }.settings-workspace-table .division-grid { width: max(100%, 780px); min-width: 780px; grid-template-columns: minmax(210px, 1.5fr) minmax(110px, .75fr) minmax(150px, 1fr) minmax(105px, .7fr) minmax(46px, .25fr); }.dash-page .division-table .division-grid, .work-requests-panel .division-grid, .resource-page .division-grid { width: max(100%, 760px); }.team-dashboard .team-grid-row { width: max(100%, 760px); min-width: 760px; grid-template-columns: minmax(210px, 1.45fr) minmax(145px, 1fr) minmax(85px, .55fr) minmax(125px, .8fr) minmax(145px, .9fr); }.division-actions button.is-danger, .work-request-route-actions button.is-danger, .attachment-table__remove { border-color: #cbdadd !important; background: #fff !important; color: #075b65 !important; }.division-actions button.is-danger:hover:not(:disabled), .work-request-route-actions button.is-danger:hover:not(:disabled), .attachment-table__remove:hover:not(:disabled) { border-color: #78aeb4 !important; background: #edf7f7 !important; color: #074f59 !important; }
+.settings-workspace-table, .dash-page .division-table, .work-requests-panel .division-table, .team-dashboard .division-table, .resource-page .division-table { width: 100%; overflow-x: auto; }.settings-workspace-table .division-grid { width: max(100%, 1040px); min-width: 1040px; grid-template-columns: minmax(210px, 1.5fr) minmax(110px, .75fr) minmax(150px, 1fr) minmax(105px, .7fr) minmax(330px, 1.35fr); }.dash-page .division-table .division-grid, .work-requests-panel .division-grid, .resource-page .division-grid { width: max(100%, 760px); }.team-dashboard .team-grid-row { width: max(100%, 760px); min-width: 760px; grid-template-columns: minmax(210px, 1.45fr) minmax(145px, 1fr) minmax(85px, .55fr) minmax(125px, .8fr) minmax(145px, .9fr); }.division-actions--division { display: flex; align-items: center; justify-content: flex-start !important; gap: 6px; white-space: nowrap; }.workspace-roster { display: grid; gap: 10px; }.workspace-roster > strong { color: #294a53; font-size: 12px; }.workspace-roster__table { overflow: auto; border: 1px solid #e1e9eb; border-radius: 7px; }.workspace-roster__table > div { display: grid; grid-template-columns: repeat(2, minmax(130px, 1fr)); gap: 12px; min-width: 360px; border-bottom: 1px solid #e8edef; padding: 9px 11px; color: #40555d; font-size: 12px; }.workspace-roster__table > div:first-child { background: #f8fafb; color: #708189; font-size: 10px; font-weight: 800; text-transform: uppercase; }.workspace-roster__table > div:last-child { border-bottom: 0; }.workspace-roster__table > p { margin: 0; padding: 12px; color: #718289; font-size: 12px; }.workspace-roster__table + strong + .workspace-roster__table > div { grid-template-columns: minmax(130px, 1fr) minmax(130px, 1fr) minmax(160px, 1.2fr); min-width: 500px; }.division-actions button.is-danger, .work-request-route-actions button.is-danger, .attachment-table__remove { border-color: #cbdadd !important; background: #fff !important; color: #075b65 !important; }.division-actions button.is-danger:hover:not(:disabled), .work-request-route-actions button.is-danger:hover:not(:disabled), .attachment-table__remove:hover:not(:disabled) { border-color: #78aeb4 !important; background: #edf7f7 !important; color: #074f59 !important; }
 .dash-panel.division-panel:not(.settings-configuration-panel) .division-actions button:last-child { border-color: #cbdadd; background: #fff; color: #075b65; }.dash-panel.division-panel:not(.settings-configuration-panel) .division-actions button:last-child:hover:not(:disabled) { border-color: #78aeb4; background: #edf7f7; color: #074f59; }
 .team-dashboard .team-actions button:last-child { border-color: #c9757b !important; background: #fff !important; color: #a53b43 !important; }.team-dashboard .team-actions button:last-child:hover:not(:disabled) { border-color: #ad545c !important; background: #fff5f5 !important; color: #8d2931 !important; }
 .settings-center .division-actions--destructive button:last-child { border-color: #c9757b !important; background: #fff !important; color: #a53b43 !important; }.settings-center .division-actions--destructive button:last-child:hover:not(:disabled) { border-color: #ad545c !important; background: #fff5f5 !important; color: #8d2931 !important; }

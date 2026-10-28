@@ -14,6 +14,7 @@ export type LoginResponse = {
     phone: string;
     avatarUrl: string | null;
     roles: string[];
+    roleScopes: string[];
     permissions: string[];
   };
   tokens: {
@@ -22,6 +23,18 @@ export type LoginResponse = {
     tokenType: string;
     expiresIn: number;
   };
+};
+
+export type ActorProfile = {
+  id: string;
+  roleId: string;
+  roleCode: string;
+  roleScope: string | null;
+  label: string;
+  memberId: string | null;
+  clientContactId: string | null;
+  isDefault: boolean;
+  isActive: boolean;
 };
 
 export type RefreshTokenPayload = {
@@ -63,4 +76,18 @@ export function logout(accessToken: string | null) {
     method: 'POST',
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
   });
+}
+
+export function getCurrentUser() {
+  return apiClient<ApiResponse<LoginResponse['user']>>('/auth/me').then((response) => response.data);
+}
+
+export function getActorProfiles() {
+  return apiClient<ApiResponse<ActorProfile[]>>('/actor-profiles').then((response) => response.data);
+}
+
+export function activateActorProfile(profileId: string) {
+  return apiClient<ApiResponse<ActorProfile>>(`/actor-profiles/${encodeURIComponent(profileId)}/activate`, {
+    method: 'POST',
+  }).then((response) => response.data);
 }

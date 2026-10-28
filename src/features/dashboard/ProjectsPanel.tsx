@@ -8,6 +8,7 @@ import { getGeneralDocumentCodes } from '@/services/generalDocumentCodeService';
 import { createProject, getProject, getProjects, updateProject, updateProjectDocumentCode, uploadProjectDocuments, type CreateProjectPayload, type Project } from '@/services/projectService';
 import { readableApiError } from '@/services/roleService';
 import { formatDateTime } from '@/features/workRequests/workflowPresentation';
+import { usePermissions } from '@/hooks/usePermissions';
 
 type Code = { id: string; code: string; name: string };
 const emptyForm: CreateProjectPayload = { name: '', clientId: '', shipmentNumber: '', attachments: [] };
@@ -16,16 +17,19 @@ const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const fileAccept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.dwg,.dxf,.jpg,.jpeg,.png,.zip';
 
 export function ProjectsPanel({ createRequest = 0, modalOnly = false, filterText = '' }: { createRequest?: number; modalOnly?: boolean; filterText?: string }) {
+  const { can } = usePermissions();
+  const canViewProjects = can('VIEW_PROJECT');
+  const canCreateProjects = can('CREATE_PROJECT');
   const queryClient = useQueryClient();
   const [modal, setModal] = useState<'create' | 'edit' | 'documents' | null>(null);
   const [selected, setSelected] = useState<Project | null>(null);
   const [form, setForm] = useState<CreateProjectPayload>(emptyForm);
   const [documentValues, setDocumentValues] = useState<Record<string, string>>({});
   const [pendingDocuments, setPendingDocuments] = useState<PendingAttachment[]>([]);
-  const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: getProjects });
-  const detailsQuery = useQuery({ queryKey: ['projects', selected?.id], queryFn: () => getProject(selected!.id), enabled: Boolean(selected) && modal !== 'create' });
-  const clientsQuery = useQuery({ queryKey: ['clients'], queryFn: getClients, enabled: modal === 'create' });
-  const codesQuery = useQuery({ queryKey: ['general-document-codes'], queryFn: getGeneralDocumentCodes, enabled: modal === 'create' || modal === 'documents' });
+  const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: getProjects, enabled: canViewProjects });
+  const detailsQuery = useQuery({ queryKey: ['projects', selected?.id], queryFn: () => getProject(selected!.id), enabled: canViewProjects && Boolean(selected) && modal !== 'create' });
+  const clientsQuery = useQuery({ queryKey: ['clients'], queryFn: getClients, enabled: canCreateProjects && modal === 'create' && can('VIEW_CLIENTS') });
+  const codesQuery = useQuery({ queryKey: ['general-document-codes'], queryFn: getGeneralDocumentCodes, enabled: ((modal === 'create' && canCreateProjects) || modal === 'documents') && can('VIEW_DOCUMENT_CODES') });
   const close = () => { setModal(null); setSelected(null); setForm(emptyForm); setDocumentValues({}); setPendingDocuments([]); };
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['projects'] });
   useEffect(() => { if (createRequest) { setForm(emptyForm); setModal('create'); } }, [createRequest]);

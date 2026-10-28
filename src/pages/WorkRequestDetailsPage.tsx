@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, X } from 'lucide-react';
 import { useParams } from 'react-router-dom';
@@ -10,20 +10,20 @@ import { WorkRequestActionBar } from '@/features/workRequests/WorkRequestActionB
 import { WorkRequestAuditTrail } from '@/features/workRequests/WorkRequestAuditTrail';
 import { documentId, recordList } from '@/features/workRequests/documentData';
 import { WorkRequestDocumentPreview } from '@/features/workRequests/WorkRequestDocumentPreview';
-import { WorkRequestDocuments } from '@/features/workRequests/WorkRequestDocuments';
 import { WorkRequestHeader } from '@/features/workRequests/WorkRequestHeader';
 import { WorkRequestRevisionRegistry } from '@/features/workRequests/WorkRequestRevisionRegistry';
-import { WorkRequestRoutingSummary } from '@/features/workRequests/WorkRequestRoutingSummary';
 import { WorkRequestWorkflowTracker } from '@/features/workRequests/WorkRequestWorkflowTracker';
-import { getActiveAssignments } from '@/features/workRequests/workflowPresentation';
+import { toWorkRequestWorkflowViewModel } from '@/features/workRequests/workflowViewModel';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { getDivisions } from '@/services/divisionService';
 import { getActiveEngineeringDocumentCodes } from '@/services/engineeringDocumentCodeService';
 import { getActiveEtcDocumentCodes } from '@/services/etcDocumentCodeService';
 import { getActiveGeneralDocumentCodes } from '@/services/generalDocumentCodeService';
 import { getActiveMarketingDocumentCodes } from '@/services/marketingDocumentCodeService';
 import { getActiveProjectManagementOperationDocumentCodes } from '@/services/projectManagementOperationDocumentCodeService';
+import { ApiClientError } from '@/services/apiClient';
 import { readableApiError } from '@/services/roleService';
-import { getWorkRequest, getWorkRequestAssignments, getWorkRequestAvailableActions, getWorkRequestDocumentVersions, getWorkRequestDocuments, getWorkRequestEvents, uploadWorkRequestDocuments } from '@/services/workRequestService';
+import { getWorkRequest, getWorkRequestAvailableActions, getWorkRequestDocumentVersions, getWorkRequestDocuments, getWorkRequestEvents, getWorkRequestInternalHistory, getWorkRequestRoute, uploadWorkRequestDocuments } from '@/services/workRequestService';
 import { createRequestId } from '@/utils/requestId';
 import '@/features/workRequests/workRequestDetails.css';
 
@@ -35,9 +35,10 @@ export function WorkRequestDetailsPage() {
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [pendingDocuments, setPendingDocuments] = useState<PendingAttachment[]>([]);
-  const lastActionsDiagnostic = useRef<string | null>(null);
   const detailQuery = useQuery({ queryKey: ['work-request', id], queryFn: () => getWorkRequest(id!), enabled });
-  const assignmentsQuery = useQuery({ queryKey: ['work-request', id, 'assignments'], queryFn: () => getWorkRequestAssignments(id!), enabled });
+  const routeQuery = useQuery({ queryKey: ['work-request', id, 'route'], queryFn: () => getWorkRequestRoute(id!), enabled });
+  const internalHistoryQuery = useQuery({ queryKey: ['work-request', id, 'internal-history'], queryFn: () => getWorkRequestInternalHistory(id!), enabled });
+  const divisionsQuery = useQuery({ queryKey: ['divisions'], queryFn: getDivisions, enabled });
   const actionsQuery = useQuery({ queryKey: ['work-request', id, 'available-actions'], queryFn: () => getWorkRequestAvailableActions(id!), enabled });
   const documentsQuery = useQuery({ queryKey: ['work-request', id, 'documents'], queryFn: () => getWorkRequestDocuments(id!), enabled });
   const generalCodesQuery = useQuery({ queryKey: ['general-document-codes', 'active'], queryFn: getActiveGeneralDocumentCodes, enabled: uploadOpen });
@@ -68,52 +69,40 @@ export function WorkRequestDetailsPage() {
   }, [documents, selectedDocumentId]);
 
   const versionsQuery = useQuery({ queryKey: ['work-request', id, 'documents', selectedDocumentId, 'versions'], queryFn: () => getWorkRequestDocumentVersions(id!, selectedDocumentId!), enabled: enabled && Boolean(selectedDocumentId) });
-
-  useEffect(() => {
-    if (!import.meta.env.DEV || !id || actionsQuery.isPending) return;
-    const diagnosticKey = `${actionsQuery.status}:${actionsQuery.dataUpdatedAt}:${actionsQuery.errorUpdatedAt}:${assignmentsQuery.status}:${assignmentsQuery.dataUpdatedAt}`;
-    if (lastActionsDiagnostic.current === diagnosticKey) return;
-    lastActionsDiagnostic.current = diagnosticKey;
-
-    const availableActions = Array.isArray(actionsQuery.data) ? actionsQuery.data : [];
-    const detailAvailableActions = Array.isArray(detailQuery.data?.availableActions) ? detailQuery.data.availableActions : [];
-    const activeAssignments = getActiveAssignments(Array.isArray(assignmentsQuery.data) ? assignmentsQuery.data : []);
-    console.info('[Work Request action debug]', {
-      workRequestId: id,
-      currentState: detailQuery.data?.currentState,
-      activeAssignments: activeAssignments.map((assignment) => ({ level: assignment.level, divisionId: assignment.divisionId, teamId: assignment.teamId, memberId: assignment.memberId, assignee: assignment.assignee })),
-      availableActions,
-      availableActionsStatus: actionsQuery.status,
-    });
-
-    if (actionsQuery.isSuccess && detailQuery.data && JSON.stringify(availableActions) !== JSON.stringify(detailAvailableActions)) {
-      console.warn('[Work Request available actions inconsistency]', { workRequestId: id, dedicatedAvailableActions: availableActions, detailAvailableActions });
-    }
-  }, [actionsQuery.data, actionsQuery.dataUpdatedAt, actionsQuery.errorUpdatedAt, actionsQuery.isPending, actionsQuery.isSuccess, actionsQuery.status, assignmentsQuery.data, assignmentsQuery.dataUpdatedAt, assignmentsQuery.status, detailQuery.data, id]);
+  const workflow = useMemo(() => detailQuery.data ? toWorkRequestWorkflowViewModel(detailQuery.data, routeQuery.data) : null, [detailQuery.data, routeQuery.data]);
+  const divisionNames = useMemo(() => new Map((divisionsQuery.data?.items ?? []).map((division) => [division.id, division.name])), [divisionsQuery.data]);
 
   if (!id) return <PageError title="Work Request not found" copy="The requested Work Request identifier is missing." onRetry={() => undefined} />;
   if (detailQuery.isLoading) return <WorkspaceLoadingState entity="Work Request" />;
   if (detailQuery.isError || !detailQuery.data) return <PageError title="Unable to load Work Request" copy="This Work Request may not exist or is no longer available." onRetry={() => void detailQuery.refetch()} />;
 
-  const assignments = Array.isArray(assignmentsQuery.data) ? assignmentsQuery.data : [];
   const availableActions = Array.isArray(actionsQuery.data) ? actionsQuery.data : [];
   const versions = recordList(versionsQuery.data, ['items', 'versions']);
   const events = eventsQuery.data?.items ?? [];
+  const currentHandler = workflow?.currentRouteOccurrence?.divisionId ? divisionNames.get(workflow.currentRouteOccurrence.divisionId) ?? null : null;
+  const formalRevisionEvents = (internalHistoryQuery.data?.events ?? []).filter((event) => event.action === 'FORMAL_REVISION_TRIGGERED');
+  const routeError = routeQuery.isError
+    ? `Lifecycle request failed${routeQuery.error instanceof ApiClientError ? ` (HTTP ${routeQuery.error.status})` : ''}: ${readableApiError(routeQuery.error, 'The Work Request lifecycle could not be loaded.')}`
+    : null;
   const refreshWorkflow = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['work-requests'] }),
       queryClient.invalidateQueries({ queryKey: ['work-request', id] }),
-      queryClient.invalidateQueries({ queryKey: ['work-request', id, 'assignments'] }),
+      queryClient.invalidateQueries({ queryKey: ['work-request', id, 'route'] }),
+      queryClient.invalidateQueries({ queryKey: ['work-request', id, 'internal-history'] }),
       queryClient.invalidateQueries({ queryKey: ['work-request', id, 'available-actions'] }),
+      queryClient.invalidateQueries({ queryKey: ['work-request', id, 'documents'] }),
       queryClient.invalidateQueries({ queryKey: ['work-request', id, 'events'] }),
-      detailQuery.refetch(), assignmentsQuery.refetch(), actionsQuery.refetch(), eventsQuery.refetch(),
+      queryClient.invalidateQueries({ queryKey: ['work-request', id, 'info-requests'] }),
+      queryClient.invalidateQueries({ queryKey: ['work-request', id, 'communication-recipients'] }),
+      detailQuery.refetch(), routeQuery.refetch(), internalHistoryQuery.refetch(), actionsQuery.refetch(), documentsQuery.refetch(), versionsQuery.refetch(), eventsQuery.refetch(),
     ]);
   };
   const actionArea = actionsQuery.isError
     ? <WorkRequestActionsUnavailable onRetry={() => void actionsQuery.refetch()} />
     : actionsQuery.isLoading
       ? <WorkRequestActionsLoading />
-      : <WorkRequestActionBar actions={availableActions} assignments={assignments} onActionSuccess={refreshWorkflow} workRequestId={id} />;
+      : <WorkRequestActionBar actions={availableActions} documents={documents} onActionSuccess={refreshWorkflow} route={routeQuery.data} workRequestId={id} />;
 
   const submitDocuments = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -125,12 +114,11 @@ export function WorkRequestDetailsPage() {
   };
 
   return <><div className="page-stack work-request-page">
-    <WorkRequestHeader actionArea={actionArea} workRequest={detailQuery.data} />
-    <WorkRequestRoutingSummary assignments={assignments} />
-    <WorkRequestWorkflowTracker currentState={detailQuery.data.currentState} assignments={assignments} />
+    <WorkRequestHeader actionArea={actionArea} currentHandler={currentHandler} workRequest={detailQuery.data} />
+    <WorkRequestWorkflowTracker divisionNames={divisionNames} error={routeError} loading={routeQuery.isLoading} nodes={workflow?.mainRouteNodes ?? []} />
     <div className="work-request-page__grid">
-      <div className="work-request-page__main"><WorkRequestDocuments documents={documents} onAdd={() => setUploadOpen(true)} onView={setSelectedDocumentId} /><WorkRequestDocumentPreview documents={documents} onDocumentChange={setSelectedDocumentId} selectedDocumentId={selectedDocumentId} versions={versions} versionsLoading={versionsQuery.isLoading} /></div>
-      <aside className="work-request-page__aside"><WorkRequestRevisionRegistry loading={versionsQuery.isLoading} versions={versions} /><WorkRequestAuditTrail events={events} loading={eventsQuery.isLoading} /></aside>
+      <div className="work-request-page__main"><WorkRequestDocumentPreview documents={documents} error={documentsQuery.isError} onAdd={() => setUploadOpen(true)} onDocumentChange={setSelectedDocumentId} selectedDocumentId={selectedDocumentId} versions={versions} versionsLoading={versionsQuery.isLoading} /></div>
+      <aside className="work-request-page__aside"><WorkRequestRevisionRegistry error={internalHistoryQuery.isError} events={formalRevisionEvents} loading={internalHistoryQuery.isLoading} /><WorkRequestAuditTrail error={eventsQuery.isError} events={events} loading={eventsQuery.isLoading} /></aside>
     </div>
   </div>{uploadOpen ? <WorkRequestDocumentUploadModal attachments={pendingDocuments} codes={documentCodes} codesError={documentCodesError} codesLoading={documentCodesLoading} onChange={setPendingDocuments} onClose={() => { if (!uploadMutation.isPending) { setUploadOpen(false); setPendingDocuments([]); } }} onSubmit={submitDocuments} saving={uploadMutation.isPending} /> : null}</>;
 }

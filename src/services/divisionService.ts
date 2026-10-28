@@ -23,6 +23,21 @@ export type DivisionPayload = {
   divisionTypeId?: string;
 };
 
+export type DivisionLead = {
+  id: string;
+  member: { id: string; name: string; email: string };
+  assignedAt: string;
+  assignedByUserId: string;
+};
+
+export type DivisionLeadAssignment = {
+  division: Pick<Division, 'id' | 'name' | 'abbr'>;
+  member: { id: string; name: string; email: string; userId: string | null };
+  assignedAt: string;
+  revokedIncumbent: { member: { id: string; name: string; email: string }; revokedAt: string } | null;
+  idempotent: boolean;
+};
+
 type ApiResponse<T> = {
   success: boolean;
   message: string;
@@ -56,6 +71,20 @@ export function getDivisions() {
 export function getDivision(id: string) {
   return apiClient<ApiResponse<Division>>(`/division/${id}`, {
     headers: authHeaders(),
+  }).then((response) => response.data);
+}
+
+export function getDivisionLead(id: string) {
+  return apiClient<ApiResponse<DivisionLead | null>>(`/division/${encodeURIComponent(id)}/lead`, {
+    headers: authHeaders(),
+  }).then((response) => response.data);
+}
+
+export function setDivisionLead(id: string, memberId: string) {
+  return apiClient<ApiResponse<DivisionLeadAssignment>>(`/division/${encodeURIComponent(id)}/lead`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify({ memberId }),
   }).then((response) => response.data);
 }
 

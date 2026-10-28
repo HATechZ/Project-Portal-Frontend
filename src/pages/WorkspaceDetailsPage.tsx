@@ -6,11 +6,13 @@ import { getProject, type Project } from '@/services/projectService';
 import { getWorkRequests, type WorkRequest } from '@/services/workRequestService';
 import { formatDateTime } from '@/features/workRequests/workflowPresentation';
 import { WorkspaceLoadingState } from '@/components/ui/LoadingState';
+import { usePermissions } from '@/hooks/usePermissions';
 
 type WorkspaceKind = 'bid' | 'project';
 type Workspace = Bid | Project;
 
 export function WorkspaceDetailsPage({ kind }: { kind: WorkspaceKind }) {
+  const { can } = usePermissions();
   const { id } = useParams();
   const label = kind === 'bid' ? 'Bid' : 'Project';
   usePageTitle(`${label} Details`);
@@ -18,9 +20,9 @@ export function WorkspaceDetailsPage({ kind }: { kind: WorkspaceKind }) {
   const workspaceQuery = useQuery({
     queryKey: [kind, id],
     queryFn: () => kind === 'bid' ? getBid(id!) : getProject(id!),
-    enabled: Boolean(id),
+    enabled: Boolean(id) && can(kind === 'bid' ? 'VIEW_BID' : 'VIEW_PROJECT'),
   });
-  const workRequestsQuery = useQuery({ queryKey: ['work-requests'], queryFn: getWorkRequests, enabled: Boolean(id) });
+  const workRequestsQuery = useQuery({ queryKey: ['work-requests'], queryFn: getWorkRequests, enabled: Boolean(id) && can('VIEW_WORK_REQUEST') });
   const workspace = workspaceQuery.data as Workspace | undefined;
   const workRequests = (workRequestsQuery.data?.items ?? []).filter((request) => parentId(kind === 'bid' ? request.bidId : request.projectId) === id);
 

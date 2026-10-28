@@ -4,59 +4,60 @@ import { toast } from 'react-toastify';
 import { getDivisions } from '@/services/divisionService';
 import { readableApiError } from '@/services/roleService';
 import { getTeamMembers, getTeams } from '@/services/teamService';
-import { applyWorkRequestWorkflowAction, assignWorkRequestDivision, assignWorkRequestMember, assignWorkRequestTeam, submitWorkRequest, type AvailableWorkflowAction, type WorkRequestAssignment, type WorkflowActionCode } from '@/services/workRequestService';
+import { appendWorkRequestMemberStep, applyWorkRequestWorkflowAction, assignWorkRequestDivision, assignWorkRequestMember, assignWorkRequestTeam, completeWorkRequestTeamStep, defineWorkRequestMemberSequence, defineWorkRequestTeamSequence, forwardWorkRequestRoute, getWorkRequestCommunicationRecipients, getWorkRequestDocumentVersions, getWorkRequestInfoRequests, getWorkRequestInternalCycle, respondToWorkRequestInfo, sendWorkRequestRouteMessage, submitWorkRequest, submitWorkRequestClientPackage, submitWorkRequestMemberStep, type AvailableWorkflowAction, type WorkRequestAssignment, type WorkRequestRouteHistory, type WorkflowActionCode } from '@/services/workRequestService';
 import { createRequestId } from '@/utils/requestId';
-import { assignmentForLevel } from './workflowPresentation';
 
-type DialogAction = Exclude<WorkflowActionCode, 'REQUEST_WORKFLOW_INFO' | 'RESPOND_WORKFLOW_INFO'>;
-type Props = { workRequestId: string; actions: AvailableWorkflowAction[]; assignments: WorkRequestAssignment[]; onActionSuccess: () => Promise<unknown> };
-const supported: DialogAction[] = ['WR_ASSIGN_DIVISION', 'WR_ASSIGN_TEAM', 'WR_ASSIGN_MEMBER', 'WR_SUBMIT', 'WR_CHECKING_APPROVE', 'WR_APPROVAL_APPROVE', 'WR_REQUEST_REVISION', 'WR_FINAL_RELEASE'];
+type Legacy = Exclude<WorkflowActionCode, 'REQUEST_WORKFLOW_INFO' | 'RESPOND_WORKFLOW_INFO'>;
+type Code = Legacy | 'DEFINE_TEAM_SEQUENCE' | 'DEFINE_MEMBER_SEQUENCE' | 'APPEND_MEMBER_STEP' | 'SUBMIT_MEMBER_STEP' | 'COMPLETE_TEAM_STEP' | 'FORWARD_ROUTE' | 'SUBMIT_CLIENT_PACKAGE' | 'REQUEST_WORKFLOW_INFO' | 'RESPOND_WORKFLOW_INFO';
+type Props = { workRequestId: string; actions: AvailableWorkflowAction[]; assignments?: WorkRequestAssignment[]; route?: WorkRequestRouteHistory; documents?: Record<string, unknown>[]; onActionSuccess: () => Promise<unknown> };
+const supported = new Set<Code>(['WR_ASSIGN_DIVISION', 'WR_ASSIGN_TEAM', 'WR_ASSIGN_MEMBER', 'WR_SUBMIT', 'WR_CHECKING_APPROVE', 'WR_APPROVAL_APPROVE', 'WR_REQUEST_REVISION', 'WR_FINAL_RELEASE', 'DEFINE_TEAM_SEQUENCE', 'DEFINE_MEMBER_SEQUENCE', 'APPEND_MEMBER_STEP', 'SUBMIT_MEMBER_STEP', 'COMPLETE_TEAM_STEP', 'FORWARD_ROUTE', 'SUBMIT_CLIENT_PACKAGE', 'REQUEST_WORKFLOW_INFO', 'RESPOND_WORKFLOW_INFO']);
 
-export function WorkRequestActionBar({ workRequestId, actions, assignments, onActionSuccess }: Props) {
-  const [action, setAction] = useState<DialogAction | null>(null);
-  const [targetId, setTargetId] = useState('');
-  const [note, setNote] = useState('');
-  const visible = actions.filter((item) => supported.includes(item.code as DialogAction) || item.code === 'REQUEST_WORKFLOW_INFO');
-  const divisionId = assignmentForLevel(assignments, 'DIVISION')?.divisionId ?? '';
-  const teamId = assignmentForLevel(assignments, 'TEAM')?.teamId ?? '';
+export function WorkRequestActionBar({ workRequestId, actions, assignments = [], route, documents = [], onActionSuccess }: Props) {
+  const [action, setAction] = useState<Code | null>(null); const [ids, setIds] = useState<string[]>([]); const [targetId, setTargetId] = useState(''); const [message, setMessage] = useState(''); const [documentId, setDocumentId] = useState('');
+  const projection = route?.projection; const cycleId = projection?.divisionCycleId ?? ''; const teamStepId = projection?.teamStepId ?? ''; const memberStepId = projection?.memberStepId ?? '';
+  const assignmentsActive = assignments.filter((item) => item.unassignedAt === null && item.replacedAt === null); const legacyTeamId = assignmentsActive.find((item) => item.level === 'TEAM')?.teamId ?? '';
+  const cycleQuery = useQuery({ queryKey: ['work-request', workRequestId, 'internal-cycle', cycleId], queryFn: () => getWorkRequestInternalCycle(workRequestId, cycleId), enabled: Boolean(cycleId) && action !== null && needsCycle(action) });
+  const teamsQuery = useQuery({ queryKey: ['teams'], queryFn: () => getTeams({ page: 1, limit: 100 }), enabled: action === 'DEFINE_TEAM_SEQUENCE' || action === 'WR_ASSIGN_TEAM' });
+  const currentTeam = cycleQuery.data?.teamSteps.find((item) => item.id === teamStepId)?.team; const teamId = currentTeam?.id ?? legacyTeamId;
+  const membersQuery = useQuery({ queryKey: ['teams', teamId, 'members'], queryFn: () => getTeamMembers(teamId), enabled: Boolean(teamId) && (action === 'DEFINE_MEMBER_SEQUENCE' || action === 'APPEND_MEMBER_STEP' || action === 'WR_ASSIGN_MEMBER') });
   const divisionsQuery = useQuery({ queryKey: ['divisions'], queryFn: getDivisions, enabled: action === 'WR_ASSIGN_DIVISION' });
-  const teamsQuery = useQuery({ queryKey: ['teams'], queryFn: () => getTeams({ page: 1, limit: 100 }), enabled: action === 'WR_ASSIGN_TEAM' });
-  const membersQuery = useQuery({ queryKey: ['teams', teamId, 'members'], queryFn: () => getTeamMembers(teamId), enabled: action === 'WR_ASSIGN_MEMBER' && Boolean(teamId) });
-  const divisions = useMemo(() => (divisionsQuery.data?.items ?? []).filter((item) => item.isActive), [divisionsQuery.data]);
-  const teams = useMemo(() => (teamsQuery.data?.items ?? []).filter((item) => item.isActive !== false && item.divisionId === divisionId), [teamsQuery.data, divisionId]);
+  const recipientsQuery = useQuery({ queryKey: ['work-request', workRequestId, 'communication-recipients'], queryFn: () => getWorkRequestCommunicationRecipients(workRequestId), enabled: action === 'REQUEST_WORKFLOW_INFO' });
+  const infoRequestsQuery = useQuery({ queryKey: ['work-request', workRequestId, 'info-requests'], queryFn: () => getWorkRequestInfoRequests(workRequestId), enabled: action === 'RESPOND_WORKFLOW_INFO' });
+  const versionsQuery = useQuery({ queryKey: ['work-request', workRequestId, 'documents', documentId, 'versions'], queryFn: () => getWorkRequestDocumentVersions(workRequestId, documentId), enabled: action === 'SUBMIT_CLIENT_PACKAGE' && Boolean(documentId) });
+  const teams = useMemo(() => (teamsQuery.data?.items ?? []).filter((item) => item.isActive !== false && (!cycleQuery.data?.routeStep.divisionId || item.divisionId === cycleQuery.data.routeStep.divisionId)), [teamsQuery.data, cycleQuery.data]);
   const members = useMemo(() => (membersQuery.data ?? []).filter((item) => item.isActive !== false), [membersQuery.data]);
-  const close = () => { setAction(null); setTargetId(''); setNote(''); };
-  const mutation = useMutation({
-    mutationFn: async () => {
-      if (!action) return;
-      const payload = note.trim() ? { note: note.trim() } : {};
-      if (action === 'WR_ASSIGN_DIVISION') return assignWorkRequestDivision(workRequestId, { divisionId: targetId, ...payload }, createRequestId());
-      if (action === 'WR_ASSIGN_TEAM') return assignWorkRequestTeam(workRequestId, { teamId: targetId, ...payload }, createRequestId());
-      if (action === 'WR_ASSIGN_MEMBER') return assignWorkRequestMember(workRequestId, { memberId: targetId, ...payload }, createRequestId());
-      if (action === 'WR_SUBMIT') return submitWorkRequest(workRequestId, payload, createRequestId());
-      return applyWorkRequestWorkflowAction(workRequestId, { actionCode: action, ...payload }, createRequestId());
-    },
-    onSuccess: async () => { await onActionSuccess(); toast.success(successMessage(action)); close(); },
-    onError: async (error) => {
-      await onActionSuccess();
-      toast.error(readableApiError(error, 'Unable to complete this Work Request action.'));
-    },
-  });
-  const requiresTarget = action === 'WR_ASSIGN_DIVISION' || action === 'WR_ASSIGN_TEAM' || action === 'WR_ASSIGN_MEMBER';
-  const loading = action === 'WR_ASSIGN_DIVISION' ? divisionsQuery.isLoading : action === 'WR_ASSIGN_TEAM' ? teamsQuery.isLoading : membersQuery.isLoading;
-  const failed = action === 'WR_ASSIGN_DIVISION' ? divisionsQuery.isError : action === 'WR_ASSIGN_TEAM' ? teamsQuery.isError : membersQuery.isError;
-  const missingContext = action === 'WR_ASSIGN_TEAM' ? !divisionId : action === 'WR_ASSIGN_MEMBER' ? !teamId : false;
-  const noOptions = action === 'WR_ASSIGN_DIVISION' ? !divisions.length : action === 'WR_ASSIGN_TEAM' ? !teams.length : action === 'WR_ASSIGN_MEMBER' ? !members.length : false;
-  if (!visible.length) return null;
-  return <><div className="work-request-header__actions">{visible.map((item) => item.code === 'REQUEST_WORKFLOW_INFO'
-    ? <button className="work-request-action work-request-action--secondary" disabled key={item.code} title="Request Info will be available with the information-request workflow." type="button">{item.label}</button>
-    : <button className={item.code === 'WR_REQUEST_REVISION' ? 'work-request-action work-request-action--warning' : 'work-request-action'} key={item.code} onClick={() => { setAction(item.code as DialogAction); setTargetId(''); setNote(''); }} type="button">{buttonLabel(item)}</button>)}</div>
-    {action ? <div className="division-modal-backdrop"><section aria-modal="true" className="division-modal work-request-action-dialog" role="dialog"><div className="division-modal__head"><div><strong>{title(action)}</strong><span>{action === 'WR_REQUEST_REVISION' ? 'Return this Work Request to Preparation with an optional reason.' : 'This change is applied by the current Work Request workflow.'}</span></div><button aria-label="Close" disabled={mutation.isPending} onClick={close} type="button">X</button></div><form className="division-form" onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!requiresTarget || targetId) mutation.mutate(); }}>{requiresTarget ? <label><span>{targetLabel(action)}</span><select disabled={mutation.isPending || loading || failed || missingContext || noOptions} onChange={(event) => setTargetId(event.target.value)} required value={targetId}><option value="">{placeholder(action, loading, failed, missingContext, noOptions)}</option>{action === 'WR_ASSIGN_DIVISION' ? divisions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>) : action === 'WR_ASSIGN_TEAM' ? teams.map((item) => <option key={item.id} value={item.id}>{item.name}</option>) : members.map((item) => <option key={item.id} value={item.id}>{item.name}{item.email ? ' — ' + item.email : ''}</option>)}</select></label> : null}<label><span>{action === 'WR_REQUEST_REVISION' ? 'Comments / Reason' : 'Note'} <em>Optional</em></span><textarea disabled={mutation.isPending} maxLength={10000} onChange={(event) => setNote(event.target.value)} rows={3} value={note} /></label><div className="division-form__actions"><button disabled={mutation.isPending} onClick={close} type="button">Cancel</button><button disabled={mutation.isPending || (requiresTarget && (!targetId || missingContext || loading || failed || noOptions))} type="submit">{mutation.isPending ? 'Saving...' : submitLabel(action)}</button></div></form></section></div> : null}</>;
+  const docs = documents.map((item) => option(item, 'id', 'originalFileName')).filter(isOption); const versions = list(versionsQuery.data).map((item) => option(item, 'id', 'versionNumber')).filter(isOption);
+  const close = () => { setAction(null); setIds([]); setTargetId(''); setMessage(''); setDocumentId(''); };
+  const mutation = useMutation({ mutationFn: async () => {
+    if (!action) return;
+    if (action === 'DEFINE_TEAM_SEQUENCE') return defineWorkRequestTeamSequence(workRequestId, cycleId, ids);
+    if (action === 'DEFINE_MEMBER_SEQUENCE') return defineWorkRequestMemberSequence(workRequestId, teamStepId, ids);
+    if (action === 'APPEND_MEMBER_STEP') return appendWorkRequestMemberStep(workRequestId, teamStepId, targetId);
+    if (action === 'SUBMIT_MEMBER_STEP') return submitWorkRequestMemberStep(workRequestId, memberStepId);
+    if (action === 'COMPLETE_TEAM_STEP') return completeWorkRequestTeamStep(workRequestId, teamStepId);
+    if (action === 'FORWARD_ROUTE') return forwardWorkRequestRoute(workRequestId, projection?.routeStepId ?? '');
+    if (action === 'SUBMIT_CLIENT_PACKAGE') return submitWorkRequestClientPackage(workRequestId, ids);
+    if (action === 'REQUEST_WORKFLOW_INFO') return sendWorkRequestRouteMessage(workRequestId, ids, message.trim());
+    if (action === 'RESPOND_WORKFLOW_INFO') return respondToWorkRequestInfo(workRequestId, targetId, message.trim());
+    const payload = message.trim() ? { note: message.trim() } : {};
+    if (action === 'WR_ASSIGN_DIVISION') return assignWorkRequestDivision(workRequestId, { divisionId: targetId, ...payload }, createRequestId());
+    if (action === 'WR_ASSIGN_TEAM') return assignWorkRequestTeam(workRequestId, { teamId: targetId, ...payload }, createRequestId());
+    if (action === 'WR_ASSIGN_MEMBER') return assignWorkRequestMember(workRequestId, { memberId: targetId, ...payload }, createRequestId());
+    if (action === 'WR_SUBMIT') return submitWorkRequest(workRequestId, payload, createRequestId());
+    return applyWorkRequestWorkflowAction(workRequestId, { actionCode: action, ...payload }, createRequestId());
+  }, onSuccess: async () => { await onActionSuccess(); toast.success('Work Request action completed successfully.'); close(); }, onError: async (error) => { await onActionSuccess(); toast.error(readableApiError(error, 'Unable to complete this Work Request action.')); } });
+  if (!actions.length) return null;
+  const isMulti = action === 'DEFINE_TEAM_SEQUENCE' || action === 'DEFINE_MEMBER_SEQUENCE' || action === 'SUBMIT_CLIENT_PACKAGE' || action === 'REQUEST_WORKFLOW_INFO';
+  const multi = action === 'DEFINE_TEAM_SEQUENCE' ? teams.map((item) => ({ id: item.id, label: item.name })) : action === 'DEFINE_MEMBER_SEQUENCE' ? members.map((item) => ({ id: item.id, label: item.name })) : action === 'SUBMIT_CLIENT_PACKAGE' ? versions : action === 'REQUEST_WORKFLOW_INFO' ? (recipientsQuery.data ?? []).map((item) => ({ id: item.id, label: item.label ?? item.name ?? item.email ?? item.id })) : [];
+  const single = action === 'APPEND_MEMBER_STEP' || action === 'WR_ASSIGN_MEMBER' ? members.map((item) => ({ id: item.id, label: item.name })) : action === 'WR_ASSIGN_TEAM' ? teams.map((item) => ({ id: item.id, label: item.name })) : action === 'WR_ASSIGN_DIVISION' ? (divisionsQuery.data?.items ?? []).filter((item) => item.isActive).map((item) => ({ id: item.id, label: item.name })) : [];
+  const infoTargets = (infoRequestsQuery.data ?? []).filter((item) => item.status === 'OPEN').map((item) => ({ id: item.id, label: item.message }));
+  const targets = action === 'RESPOND_WORKFLOW_INFO' ? infoTargets : single;
+  const needsTarget = action === 'APPEND_MEMBER_STEP' || action === 'WR_ASSIGN_DIVISION' || action === 'WR_ASSIGN_TEAM' || action === 'WR_ASSIGN_MEMBER' || action === 'RESPOND_WORKFLOW_INFO';
+  const valid = !action || (isMulti ? ids.length > 0 && (action !== 'REQUEST_WORKFLOW_INFO' || Boolean(message.trim())) : needsTarget ? Boolean(targetId) : action === 'FORWARD_ROUTE' ? Boolean(projection?.routeStepId) : action === 'SUBMIT_MEMBER_STEP' ? Boolean(memberStepId) : action === 'COMPLETE_TEAM_STEP' ? Boolean(teamStepId) : true);
+  return <><div className="work-request-header__actions">{actions.map((item) => supported.has(item.code as Code) ? <button className={item.code.includes('REVISION') ? 'work-request-action work-request-action--warning' : 'work-request-action'} key={item.code} onClick={() => setAction(item.code as Code)} type="button">{item.label}</button> : <button className="work-request-action work-request-action--secondary" disabled key={item.code} title={`Unsupported frontend action: ${item.code}`} type="button">{item.label}</button>)}</div>{action ? <div className="division-modal-backdrop"><section aria-modal="true" className="division-modal work-request-action-dialog" role="dialog"><div className="division-modal__head"><div><strong>{actions.find((item) => item.code === action)?.label ?? action}</strong><span>Complete the backend-authorized workflow action.</span></div><button aria-label="Close" disabled={mutation.isPending} onClick={close} type="button">X</button></div><form className="division-form" onSubmit={(event: FormEvent) => { event.preventDefault(); if (valid) mutation.mutate(); }}>{action === 'SUBMIT_CLIENT_PACKAGE' ? <label><span>Document</span><select onChange={(event) => { setDocumentId(event.target.value); setIds([]); }} required value={documentId}><option value="">Select document</option>{docs.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label> : null}{isMulti ? <fieldset><legend>{action === 'REQUEST_WORKFLOW_INFO' ? 'Recipients' : action === 'SUBMIT_CLIENT_PACKAGE' ? 'Document versions' : 'Ordered selection'}</legend>{multi.map((item) => <label key={item.id}><input checked={ids.includes(item.id)} onChange={() => setIds((values) => values.includes(item.id) ? values.filter((id) => id !== item.id) : [...values, item.id])} type="checkbox" /> {item.label}</label>)}</fieldset> : null}{needsTarget ? <label><span>{action === 'RESPOND_WORKFLOW_INFO' ? 'Information request' : 'Selection'}</span><select onChange={(event) => setTargetId(event.target.value)} required value={targetId}><option value="">Select option</option>{targets.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label> : null}{needsMessage(action) ? <label><span>{action === 'REQUEST_WORKFLOW_INFO' || action === 'RESPOND_WORKFLOW_INFO' ? 'Message *' : 'Note (Optional)'}</span><textarea maxLength={10000} onChange={(event) => setMessage(event.target.value)} required={action === 'REQUEST_WORKFLOW_INFO' || action === 'RESPOND_WORKFLOW_INFO'} rows={3} value={message} /></label> : null}<div className="division-form__actions"><button disabled={mutation.isPending} onClick={close} type="button">Cancel</button><button disabled={mutation.isPending || !valid} type="submit">{mutation.isPending ? 'Saving...' : 'Confirm'}</button></div></form></section></div> : null}</>;
 }
-
-function buttonLabel(action: AvailableWorkflowAction) { return action.code === 'WR_CHECKING_APPROVE' || action.code === 'WR_APPROVAL_APPROVE' ? 'Approve' : action.label; }
-function title(action: DialogAction) { return ({ WR_ASSIGN_DIVISION: 'Assign Division', WR_ASSIGN_TEAM: 'Assign Team', WR_ASSIGN_MEMBER: 'Assign Preparation Member', WR_SUBMIT: 'Submit Work Request', WR_CHECKING_APPROVE: 'Checking Review Approve', WR_APPROVAL_APPROVE: 'Approval Review Approve', WR_REQUEST_REVISION: 'Request Revision', WR_FINAL_RELEASE: 'Final Release' })[action]; }
-function submitLabel(action: DialogAction) { return action === 'WR_CHECKING_APPROVE' || action === 'WR_APPROVAL_APPROVE' ? 'Approve' : ({ WR_ASSIGN_DIVISION: 'Assign Division', WR_ASSIGN_TEAM: 'Assign Team', WR_ASSIGN_MEMBER: 'Assign Preparation Member', WR_SUBMIT: 'Submit', WR_REQUEST_REVISION: 'Request Revision', WR_FINAL_RELEASE: 'Final Release' })[action]; }
-function targetLabel(action: DialogAction) { if (action === 'WR_ASSIGN_DIVISION') return 'Division'; if (action === 'WR_ASSIGN_TEAM') return 'Team'; return action === 'WR_ASSIGN_MEMBER' ? 'Preparation Member' : ''; }
-function placeholder(action: DialogAction, loading: boolean, failed: boolean, missing: boolean, empty: boolean) { if (missing) return action === 'WR_ASSIGN_TEAM' ? 'No assigned Division is available' : 'No assigned Team is available'; if (loading) return 'Loading options...'; if (failed) return 'Unable to load options'; if (empty) return action === 'WR_ASSIGN_TEAM' ? 'No teams available for this Division' : action === 'WR_ASSIGN_MEMBER' ? 'No members available for this Team' : 'No divisions available'; return 'Select ' + targetLabel(action); }
-function successMessage(action: DialogAction | null) { return action === 'WR_REQUEST_REVISION' ? 'Revision requested successfully.' : submitLabel(action ?? 'WR_SUBMIT') + ' completed successfully.'; }
+function needsCycle(action: Code) { return ['DEFINE_TEAM_SEQUENCE', 'DEFINE_MEMBER_SEQUENCE', 'APPEND_MEMBER_STEP', 'SUBMIT_MEMBER_STEP', 'COMPLETE_TEAM_STEP'].includes(action); }
+function needsMessage(action: Code) { return action === 'REQUEST_WORKFLOW_INFO' || action === 'RESPOND_WORKFLOW_INFO' || action.startsWith('WR_'); }
+type Option = { id: string; label: string }; function isOption(value: Option | null): value is Option { return value !== null; }
+function option(value: Record<string, unknown>, idKey: string, labelKey: string): Option | null { const id = value[idKey] ?? value.documentVersionId; const label = value[labelKey] ?? value.originalFileName ?? id; return typeof id === 'string' && typeof label === 'string' ? { id, label } : null; }
+function list(value: unknown): Record<string, unknown>[] { if (Array.isArray(value)) return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object'); if (value && typeof value === 'object') { const record = value as Record<string, unknown>; return list(record.items ?? record.versions ?? []); } return []; }
