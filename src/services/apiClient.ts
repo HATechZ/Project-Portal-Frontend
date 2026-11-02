@@ -34,6 +34,8 @@ function clearSessionTokens() {
   clearStoredUser();
 }
 
+export type BlobApiResponse = { blob: Blob; filename: string | null };
+
 function requestTokenRefresh(refreshToken: string) {
   if (!refreshRequest) {
     refreshRequest = apiClient<RefreshResponse>(
@@ -113,4 +115,26 @@ export async function apiClient<T>(path: string, init?: RequestInit, retryOnUnau
   }
 
   return data as T;
+}
+
+/** Authenticated binary response helper for existing download and preview APIs. */
+export async function apiClientBlob(path: string, init?: RequestInit): Promise<BlobApiResponse> {
+  const accessToken = localStorage.getItem('accessToken');
+  const headers = new Headers(init?.headers);
+  if (!headers.has('Content-Type') && !(init?.body instanceof FormData)) headers.set('Content-Type', 'application/json');
+  if (accessToken && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${accessToken}`);
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  if (!response.ok) {
+    let data: unknown = null;
+    try { data = await response.json(); } catch { data = { message: response.statusText }; }
+    throw new ApiClientError(response.status, data);
+  }
+  return { blob: await response.blob(), filename: fileNameFromDisposition(response.headers.get('content-disposition')) };
+}
+
+function fileNameFromDisposition(value: string | null) {
+  if (!value) return null;
+  const encoded = value.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) { try { return decodeURIComponent(encoded); } catch { return encoded; } }
+  return value.match(/filename="?([^";]+)"?/i)?.[1] ?? null;
 }

@@ -50,15 +50,15 @@ const emptyMemberForm: MemberForm = {
   name: '', email: '', password: '', roleId: '', divisionId: '', designationId: '', phone: '', isActive: true,
 };
 
-function MetricsStrip({ bids, projects, workRequests, members, loading, canViewBid, canViewProject, canViewWorkRequest, canViewMembers }: {
-  bids: Bid[]; projects: Project[]; workRequests: WorkRequest[]; members: Member[]; loading: boolean; canViewBid: boolean; canViewProject: boolean; canViewWorkRequest: boolean; canViewMembers: boolean;
+function MetricsStrip({ bids, projects, workRequests, loading, canViewBid, canViewProject, canViewWorkRequest, canViewDocument }: {
+  bids: Bid[]; projects: Project[]; workRequests: WorkRequest[]; loading: boolean; canViewBid: boolean; canViewProject: boolean; canViewWorkRequest: boolean; canViewDocument: boolean;
 }) {
   const linkedDocuments = projects.reduce((total, project) => total + project.fileCount, 0) + bids.reduce((total, bid) => total + bid.fileCount, 0);
   const metrics = [
     ...(canViewProject ? [{ label: 'Active engineering projects', value: projects.length, caption: 'Current project workspaces', icon: FolderKanban, tone: 'orange' }] : []),
     ...(canViewBid ? [{ label: 'Active bids / proposals', value: bids.length, caption: 'Open bid workspaces', icon: FilePlus2, tone: 'green' }] : []),
     ...(canViewWorkRequest ? [{ label: 'Pending reviews', value: workRequests.length, caption: 'Requests in the workflow', icon: Clock3, tone: 'blue' }] : []),
-    ...(canViewMembers && (canViewBid || canViewProject) ? [{ label: 'Linked documents', value: linkedDocuments, caption: `${members.filter((member) => member.isActive).length} active team members`, icon: FileCheck2, tone: 'rose' }] : []),
+    ...(canViewDocument && (canViewBid || canViewProject) ? [{ label: 'Linked documents', value: linkedDocuments, caption: 'Documents in accessible workspaces', icon: FileCheck2, tone: 'rose' }] : []),
   ];
 
   return (
@@ -259,6 +259,7 @@ export function DashboardWorkspace({ modalOnly = false, createType, createReques
   const canViewBid = can('VIEW_BID');
   const canViewProject = can('VIEW_PROJECT');
   const canViewWorkRequest = can('VIEW_WORK_REQUEST');
+  const canViewDocument = can('VIEW_DOCUMENT');
   const canViewMembers = can('VIEW_MEMBERS');
 
   useEffect(() => {
@@ -402,7 +403,7 @@ export function DashboardWorkspace({ modalOnly = false, createType, createReques
       {divisionsQuery.isError ? <div className="division-alert">{getApiErrorMessage(divisionsQuery.error)}</div> : null}
       {membersQuery.isError ? <div className="division-alert">{getApiErrorMessage(membersQuery.error)}</div> : null}
       {designationsQuery.isError ? <div className="division-alert">Unable to load designations. Member creation is unavailable until the list can be loaded.</div> : null}
-      <MetricsStrip bids={bids} canViewBid={canViewBid} canViewMembers={canViewMembers} canViewProject={canViewProject} canViewWorkRequest={canViewWorkRequest} loading={bidsQuery.isLoading || projectsQuery.isLoading || workRequestsQuery.isLoading || membersQuery.isLoading} members={members} projects={projects} workRequests={workRequests} />
+      <MetricsStrip bids={bids} canViewBid={canViewBid} canViewDocument={canViewDocument} canViewProject={canViewProject} canViewWorkRequest={canViewWorkRequest} loading={bidsQuery.isLoading || projectsQuery.isLoading || workRequestsQuery.isLoading} projects={projects} workRequests={workRequests} />
       <div className="dash-top-grid">
         {canViewBid || canViewProject ? <QuickAccess bids={bids} clientNames={clientNames} loading={bidsQuery.isLoading || projectsQuery.isLoading || clientsQuery.isLoading} projects={projects} viewAllPath={canViewBid ? '/bids' : '/projects'} /> : null}
         <QuickActions can={can} onBid={() => setBidCreateRequest((current) => current + 1)} onDivision={openCreateDivisionModal} onDocuments={() => navigate('/documents')} onMember={openCreateMemberModal} onProject={() => setProjectCreateRequest((current) => current + 1)} onTeam={() => setTeamCreateRequest((current) => current + 1)} onUpload={() => setIsUploadModalOpen(true)} onWorkRequest={() => setWorkRequestCreateRequest((current) => current + 1)} onWorkRequests={() => navigate('/work-requests')} onWorkspaces={() => navigate(canViewBid ? '/bids' : '/projects')} />

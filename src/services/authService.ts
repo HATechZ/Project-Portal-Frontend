@@ -79,7 +79,10 @@ export function logout(accessToken: string | null) {
 }
 
 export function getCurrentUser() {
-  return apiClient<ApiResponse<LoginResponse['user']>>('/auth/me').then((response) => response.data);
+  const accessToken = localStorage.getItem('accessToken');
+  return apiClient<ApiResponse<LoginResponse['user']>>('/auth/me', {
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  }).then((response) => response.data);
 }
 
 export function getActorProfiles() {

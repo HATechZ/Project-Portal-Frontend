@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
@@ -7,8 +7,9 @@ import { toast } from 'react-toastify';
 import { countries, getCountryShortName } from '@/constants/countries';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { ApiClientError } from '@/services/apiClient';
-import { login } from '@/services/authService';
+import { getCurrentUser, login } from '@/services/authService';
 import { persistUser } from '@/services/authSession';
+import { resetAuthScopedQueries } from '@/services/authQueryCache';
 import { getCompanyTypes, signupCompany } from '@/services/companyService';
 
 type AuthScreen = 'company-signup' | 'login' | 'set-password' | 'all';
@@ -356,17 +357,28 @@ function getApiErrorMessage(error: unknown) {
 
 function LoginScreen({ showReference = false }: { showReference?: boolean }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [form, setForm] = useState({
     email: '',
     password: '',
   });
 
   const loginMutation = useMutation({
-    mutationFn: login,
-    onSuccess: (response) => {
+    mutationFn: async (payload: { email: string; password: string }) => {
+      const response = await login(payload);
       localStorage.setItem('accessToken', response.data.tokens.accessToken);
       localStorage.setItem('refreshToken', response.data.tokens.refreshToken);
-      persistUser(response.data.user);
+      try {
+        return { response, activeUser: await getCurrentUser() };
+      } catch (error) {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        throw error;
+      }
+    },
+    onSuccess: async ({ response, activeUser }) => {
+      persistUser(activeUser);
+      await resetAuthScopedQueries(queryClient);
       toast.success(response.message || 'Login successful');
       navigate('/dashboard');
     },

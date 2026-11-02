@@ -39,7 +39,9 @@ export function WorkRequestDetailsPage() {
   const routeQuery = useQuery({ queryKey: ['work-request', id, 'route'], queryFn: () => getWorkRequestRoute(id!), enabled });
   const internalHistoryQuery = useQuery({ queryKey: ['work-request', id, 'internal-history'], queryFn: () => getWorkRequestInternalHistory(id!), enabled });
   const divisionsQuery = useQuery({ queryKey: ['divisions'], queryFn: getDivisions, enabled });
-  const actionsQuery = useQuery({ queryKey: ['work-request', id, 'available-actions'], queryFn: () => getWorkRequestAvailableActions(id!), enabled });
+  // Workflow availability is determined only by the backend for a Work Request
+  // the active actor can open; no role or scope is reconstructed in the UI.
+  const actionsQuery = useQuery({ queryKey: ['work-request', id, 'available-actions', detailQuery.data?.updatedAt ?? null], queryFn: () => getWorkRequestAvailableActions(id!), enabled: detailQuery.isSuccess });
   const documentsQuery = useQuery({ queryKey: ['work-request', id, 'documents'], queryFn: () => getWorkRequestDocuments(id!), enabled });
   const generalCodesQuery = useQuery({ queryKey: ['general-document-codes', 'active'], queryFn: getActiveGeneralDocumentCodes, enabled: uploadOpen });
   const marketingCodesQuery = useQuery({ queryKey: ['marketing-document-codes', 'active'], queryFn: getActiveMarketingDocumentCodes, enabled: uploadOpen });
@@ -76,7 +78,7 @@ export function WorkRequestDetailsPage() {
   if (detailQuery.isLoading) return <WorkspaceLoadingState entity="Work Request" />;
   if (detailQuery.isError || !detailQuery.data) return <PageError title="Unable to load Work Request" copy="This Work Request may not exist or is no longer available." onRetry={() => void detailQuery.refetch()} />;
 
-  const availableActions = Array.isArray(actionsQuery.data) ? actionsQuery.data : [];
+  const availableActions = actionsQuery.data ?? [];
   const versions = recordList(versionsQuery.data, ['items', 'versions']);
   const events = eventsQuery.data?.items ?? [];
   const currentHandler = workflow?.currentRouteOccurrence?.divisionId ? divisionNames.get(workflow.currentRouteOccurrence.divisionId) ?? null : null;
@@ -117,7 +119,7 @@ export function WorkRequestDetailsPage() {
     <WorkRequestHeader actionArea={actionArea} currentHandler={currentHandler} workRequest={detailQuery.data} />
     <WorkRequestWorkflowTracker divisionNames={divisionNames} error={routeError} loading={routeQuery.isLoading} nodes={workflow?.mainRouteNodes ?? []} />
     <div className="work-request-page__grid">
-      <div className="work-request-page__main"><WorkRequestDocumentPreview documents={documents} error={documentsQuery.isError} onAdd={() => setUploadOpen(true)} onDocumentChange={setSelectedDocumentId} selectedDocumentId={selectedDocumentId} versions={versions} versionsLoading={versionsQuery.isLoading} /></div>
+      <div className="work-request-page__main"><WorkRequestDocumentPreview documents={documents} error={documentsQuery.isError} onAdd={() => setUploadOpen(true)} onDocumentChange={setSelectedDocumentId} selectedDocumentId={selectedDocumentId} versions={versions} versionsLoading={versionsQuery.isLoading} workRequestId={id} /></div>
       <aside className="work-request-page__aside"><WorkRequestRevisionRegistry error={internalHistoryQuery.isError} events={formalRevisionEvents} loading={internalHistoryQuery.isLoading} /><WorkRequestAuditTrail error={eventsQuery.isError} events={events} loading={eventsQuery.isLoading} /></aside>
     </div>
   </div>{uploadOpen ? <WorkRequestDocumentUploadModal attachments={pendingDocuments} codes={documentCodes} codesError={documentCodesError} codesLoading={documentCodesLoading} onChange={setPendingDocuments} onClose={() => { if (!uploadMutation.isPending) { setUploadOpen(false); setPendingDocuments([]); } }} onSubmit={submitDocuments} saving={uploadMutation.isPending} /> : null}</>;

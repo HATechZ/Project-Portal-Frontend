@@ -1,5 +1,9 @@
 import { ApiClientError, apiClient } from '@/services/apiClient';
 
+/** Internal custom-role scopes accepted by the role-management contract. */
+export const internalCustomRoleScopes = ['company', 'division', 'team', 'member'] as const;
+export type InternalCustomRoleScope = (typeof internalCustomRoleScopes)[number];
+
 export type Permission = {
   id: string;
   code: string;

@@ -1,4 +1,4 @@
-import { apiClient } from '@/services/apiClient';
+import { apiClient, apiClientBlob } from '@/services/apiClient';
 
 export const WORK_REQUEST_PRIORITIES = ['Low', 'Medium', 'High'] as const;
 export type WorkRequestPriority = (typeof WORK_REQUEST_PRIORITIES)[number];
@@ -114,6 +114,8 @@ export type WorkRequestRouteStep = {
   ordinal: number;
   kind: string;
   divisionId: string | null;
+  division?: { id?: string; name?: string | null } | null;
+  divisionName?: string | null;
   activatedAt: string | null;
   completedAt: string | null;
 };
@@ -334,7 +336,42 @@ export function getWorkRequestEvents(id: string, page = 1, limit = 20) {
 }
 
 export function getWorkRequestAvailableActions(id: string) {
-  return apiClient<ApiResponse<AvailableWorkflowAction[]>>(`${requestPath(id)}/available-actions`).then((response) => response.data);
+  return apiClient<ApiResponse<unknown>>(`${requestPath(id)}/available-actions`).then((response) => normalizeAvailableWorkflowActions(response.data));
+}
+
+export function previewDocumentVersion(versionId: string) {
+  return apiClientBlob(`/document-versions/${encodeURIComponent(versionId)}/preview`);
+}
+
+export function downloadDocumentVersion(versionId: string) {
+  return apiClientBlob(`/document-versions/${encodeURIComponent(versionId)}/download`);
+}
+
+export function downloadWorkRequestDocuments(id: string, documentVersionIds: string[]) {
+  return apiClientBlob(`${requestPath(id)}/documents/download`, { method: 'POST', body: JSON.stringify({ documentVersionIds }) });
+}
+
+/** The backend owns workflow availability; this only normalizes its response envelope. */
+function normalizeAvailableWorkflowActions(value: unknown): AvailableWorkflowAction[] {
+  const records = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? (value as { availableActions?: unknown; actions?: unknown; items?: unknown; data?: unknown }).availableActions
+        ?? (value as { actions?: unknown }).actions
+        ?? (value as { items?: unknown }).items
+        ?? (value as { data?: unknown }).data
+        ?? []
+      : [];
+
+  if (!Array.isArray(records)) return [];
+  return records.flatMap((item) => {
+    if (typeof item === 'string' && item) return [{ code: item, label: item, targetKind: '' }];
+    if (!item || typeof item !== 'object') return [];
+    const action = item as Partial<AvailableWorkflowAction>;
+    return typeof action.code === 'string' && action.code
+      ? [{ code: action.code, label: typeof action.label === 'string' && action.label ? action.label : action.code, targetKind: typeof action.targetKind === 'string' ? action.targetKind : '' }]
+      : [];
+  });
 }
 
 export function getWorkRequestRoute(id: string) {

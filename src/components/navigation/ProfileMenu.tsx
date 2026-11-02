@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { activateActorProfile, getActorProfiles, getCurrentUser, logout } from '@/services/authService';
 import { clearStoredUser, persistUser, readStoredUser } from '@/services/authSession';
+import { resetAuthScopedQueries } from '@/services/authQueryCache';
 
 export function ProfileMenu() {
   const navigate = useNavigate();
@@ -32,9 +33,9 @@ export function ProfileMenu() {
       await activateActorProfile(profileId);
       return getCurrentUser();
     },
-    onSuccess: (activeUser) => {
+    onSuccess: async (activeUser) => {
       persistUser(activeUser);
-      void queryClient.invalidateQueries();
+      await resetAuthScopedQueries(queryClient);
       setOpen(false);
       toast.success('Active profile updated.');
     },

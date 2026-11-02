@@ -11,7 +11,8 @@ export function WorkRequestWorkflowTracker({ nodes, divisionNames, loading, erro
     {!loading && !error && !nodes.length ? <div className="work-request-tracker__empty">No route occurrences are available.</div> : null}
     {!loading && !error && nodes.length ? <div className="work-request-tracker__steps">{nodes.map((node) => {
       const status = node.completedAt ? 'completed' : node.isCurrent ? 'current' : 'pending';
-      return <article className={`work-request-step work-request-step--${status}`} key={node.id}><span aria-hidden="true" className="work-request-step__connector" /><span className="work-request-step__icon">{status === 'completed' ? <Check size={15} /> : <Circle fill="currentColor" size={10} />}</span><div><strong>{node.divisionId ? divisionNames.get(node.divisionId) ?? 'Division unavailable' : routeKindLabel(node.kind)}</strong><small>{routeKindLabel(node.kind)}</small></div></article>;
+      const divisionName = node.divisionName ?? (node.divisionId ? divisionNames.get(node.divisionId) ?? null : null);
+      return <article className={`work-request-step work-request-step--${status}`} key={node.id}><span aria-hidden="true" className="work-request-step__connector" /><span className="work-request-step__icon">{status === 'completed' ? <Check size={15} /> : <Circle fill="currentColor" size={10} />}</span><div><strong>{divisionName ?? (node.divisionId ? 'Division unavailable' : routeKindLabel(node.kind))}</strong><small>{routeKindLabel(node.kind)}</small></div></article>;
     })}</div> : null}
   </section>;
 }

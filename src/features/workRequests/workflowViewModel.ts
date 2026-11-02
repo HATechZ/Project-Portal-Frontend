@@ -5,6 +5,7 @@ export type WorkflowRouteNode = {
   ordinal: number;
   kind: string;
   divisionId: string | null;
+  divisionName: string | null;
   activatedAt: string | null;
   completedAt: string | null;
   isCurrent: boolean;
@@ -35,7 +36,8 @@ function toRouteNode(step: WorkRequestRouteStep, currentStepId: string | null): 
     id: step.id,
     ordinal: step.ordinal,
     kind: step.kind,
-    divisionId: step.divisionId,
+    divisionId: step.divisionId ?? step.division?.id ?? null,
+    divisionName: step.divisionName ?? step.division?.name ?? null,
     activatedAt: step.activatedAt,
     completedAt: step.completedAt,
     isCurrent: step.id === currentStepId,

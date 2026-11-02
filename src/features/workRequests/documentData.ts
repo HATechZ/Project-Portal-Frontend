@@ -24,6 +24,13 @@ export function documentId(document: ApiRecord) {
   return stringValue(document, ['id', 'documentId']);
 }
 
+/** Never substitute a document ID where the API requires a document version ID. */
+export function documentVersionId(document: ApiRecord | null | undefined) {
+  const direct = stringValue(document, ['documentVersionId', 'versionId', 'latestVersionId']);
+  if (direct) return direct;
+  return document && isRecord(document.latestVersion) ? stringValue(document.latestVersion, ['id', 'documentVersionId', 'versionId']) : null;
+}
+
 export function documentLabel(document: ApiRecord) {
   return stringValue(document, ['originalFileName', 'generatedFileName', 'name', 'fileName', 'documentCode']) || 'Untitled document';
 }
@@ -51,8 +58,14 @@ export function versionActor(version: ApiRecord | null | undefined) {
   return null;
 }
 
-export function previewUrl(record: ApiRecord | null | undefined) {
-  return stringValue(record, ['previewUrl', 'downloadUrl', 'fileUrl', 'url']);
+export function previewUrl(record: ApiRecord | null | undefined): string | null {
+  const direct = stringValue(record, ['previewUrl', 'downloadUrl', 'fileUrl', 'url']);
+  return direct ?? (record && isRecord(record.latestVersion) ? previewUrl(record.latestVersion) : null);
+}
+
+export function documentMimeType(record: ApiRecord | null | undefined): string | null {
+  const direct = stringValue(record, ['mimeType', 'contentType', 'fileType']);
+  return direct ?? (record && isRecord(record.latestVersion) ? documentMimeType(record.latestVersion) : null);
 }
 
 function isRecord(value: unknown): value is ApiRecord {

@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { BidsPanel } from '@/features/dashboard/BidsPanel';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { usePermissions } from '@/hooks/usePermissions';
 
 export function BidsPage() {
+  const { can } = usePermissions();
   usePageTitle('Bids');
   const [search, setSearch] = useState('');
   const [createRequest, setCreateRequest] = useState(0);
@@ -10,7 +12,7 @@ export function BidsPage() {
   return <div className="page-stack resource-page">
     <section className="page-heading resource-page__heading">
       <div><p>Commercial</p><h1>All Bids</h1><span>Review, create, and maintain every bid in one place.</span></div>
-      <button onClick={() => setCreateRequest((value) => value + 1)} type="button">Create Bid</button>
+      {can('CREATE_BID') ? <button onClick={() => setCreateRequest((value) => value + 1)} type="button">Create Bid</button> : null}
     </section>
     <section className="resource-page__toolbar" aria-label="Bid filters">
       <label><span>Search bids</span><input onChange={(event) => setSearch(event.target.value)} placeholder="Search by bid, number, shipment, or status" type="search" value={search} /></label>

@@ -14,9 +14,11 @@ export function DocumentsPage() {
   usePageTitle('Documents');
   const [search, setSearch] = useState('');
   const [source, setSource] = useState<'all' | DocumentRow['source']>('all');
-  const bidsQuery = useQuery({ queryKey: ['bids'], queryFn: getBids, enabled: can('VIEW_BID') });
-  const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: getProjects, enabled: can('VIEW_PROJECT') });
-  const workRequestsQuery = useQuery({ queryKey: ['work-requests'], queryFn: getWorkRequests, enabled: can('VIEW_WORK_REQUEST') });
+  // Document access is independent from its parent workspace permissions. The
+  // backend returns only parent records whose documents this actor may view.
+  const bidsQuery = useQuery({ queryKey: ['bids'], queryFn: getBids, enabled: can('VIEW_DOCUMENT') });
+  const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: getProjects, enabled: can('VIEW_DOCUMENT') });
+  const workRequestsQuery = useQuery({ queryKey: ['work-requests'], queryFn: getWorkRequests, enabled: can('VIEW_DOCUMENT') });
   const loading = bidsQuery.isLoading || projectsQuery.isLoading || workRequestsQuery.isLoading;
   const hasError = bidsQuery.isError || projectsQuery.isError || workRequestsQuery.isError;
   const documents = useMemo<DocumentRow[]>(() => [
