@@ -10,14 +10,9 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 import { getBids, type Bid } from '@/services/bidService';
 import { getDivisionLead, getDivisions, type Division, type DivisionLead } from '@/services/divisionService';
 import { getActorProfiles } from '@/services/authService';
-import { getActiveEngineeringDocumentCodes } from '@/services/engineeringDocumentCodeService';
-import { getActiveEtcDocumentCodes } from '@/services/etcDocumentCodeService';
-import { getActiveGeneralDocumentCodes } from '@/services/generalDocumentCodeService';
-import { getActiveMarketingDocumentCodes } from '@/services/marketingDocumentCodeService';
-import { getActiveProjectManagementOperationDocumentCodes } from '@/services/projectManagementOperationDocumentCodeService';
 import { getProjects, type Project } from '@/services/projectService';
 import { readableApiError } from '@/services/roleService';
-import { createWorkRequest, getWorkRequest, getWorkRequests, updateWorkRequest, WORK_REQUEST_PRIORITIES, type CreateWorkRequestInput, type WorkRequest, type WorkRequestPriority } from '@/services/workRequestService';
+import { createWorkRequest, getWorkRequest, getWorkRequestCreationAvailableDocumentCodes, getWorkRequests, updateWorkRequest, WORK_REQUEST_PRIORITIES, type CreateWorkRequestInput, type WorkRequest, type WorkRequestPriority } from '@/services/workRequestService';
 import { createRequestId } from '@/utils/requestId';
 import { usePermissions } from '@/hooks/usePermissions';
 
@@ -56,11 +51,12 @@ export function WorkRequestsPage({ createRequest = 0, embedded = false, modalOnl
   const activeProfile = profilesQuery.data?.find((profile) => profile.isDefault) ?? null;
   const requiresResponsibleLead = activeProfile?.memberId === null;
   const originatingLeadQuery = useQuery({ queryKey: ['division-lead', createForm.originatingDivisionId], queryFn: () => getDivisionLead(createForm.originatingDivisionId), enabled: modal === 'create' && requiresResponsibleLead === true && Boolean(createForm.originatingDivisionId) });
-  const generalQuery = useQuery({ queryKey: ['general-document-codes', 'active'], queryFn: getActiveGeneralDocumentCodes, enabled: modal === 'create' && canCreateWorkRequests && can('VIEW_DOCUMENT_CODES') });
-  const marketingQuery = useQuery({ queryKey: ['marketing-document-codes', 'active'], queryFn: getActiveMarketingDocumentCodes, enabled: modal === 'create' && canCreateWorkRequests && can('VIEW_DOCUMENT_CODES') });
-  const engineeringQuery = useQuery({ queryKey: ['engineering-document-codes', 'active'], queryFn: getActiveEngineeringDocumentCodes, enabled: modal === 'create' && canCreateWorkRequests && can('VIEW_DOCUMENT_CODES') });
-  const etcQuery = useQuery({ queryKey: ['etc-document-codes', 'active'], queryFn: getActiveEtcDocumentCodes, enabled: modal === 'create' && canCreateWorkRequests && can('VIEW_DOCUMENT_CODES') });
-  const pmoQuery = useQuery({ queryKey: ['project-management-operation-document-codes', 'active'], queryFn: getActiveProjectManagementOperationDocumentCodes, enabled: modal === 'create' && canCreateWorkRequests && can('VIEW_DOCUMENT_CODES') });
+  const documentCodesQuery = useQuery({ queryKey: ['work-requests', 'creation', 'available-document-codes', createForm.originatingDivisionId], queryFn: () => getWorkRequestCreationAvailableDocumentCodes(createForm.originatingDivisionId), enabled: modal === 'create' && canCreateWorkRequests && Boolean(createForm.originatingDivisionId) });
+  useEffect(() => {
+    if (embedded || modal !== 'create') return;
+    const bidId = new URLSearchParams(window.location.search).get('bidId');
+    if (bidId) setCreateForm((current) => current.bidId === bidId && current.parentType === 'BID' ? current : { ...current, parentType: 'BID', bidId, projectId: '' });
+  }, [embedded, modal]);
   useEffect(() => { if (modal === 'edit' && detailQuery.data) setEditForm({ title: detailQuery.data.title, priority: priority(detailQuery.data.priority), notes: typeof detailQuery.data.notes === 'string' ? detailQuery.data.notes : '' }); }, [modal, detailQuery.data]);
   useEffect(() => {
     if (embedded && createRequest > 0) {
@@ -70,9 +66,10 @@ export function WorkRequestsPage({ createRequest = 0, embedded = false, modalOnl
     }
   }, [createRequest, embedded]);
   const divisions = useMemo(() => (divisionsQuery.data?.items ?? []).filter((item) => item.isActive), [divisionsQuery.data]);
-  const codes = useMemo(() => normalizeCodes([['General', generalQuery.data ?? []], ['Marketing', marketingQuery.data ?? []], ['Engineering', engineeringQuery.data ?? []], ['ETC', etcQuery.data ?? []], ['Project Management & Operations', pmoQuery.data ?? []]]), [generalQuery.data, marketingQuery.data, engineeringQuery.data, etcQuery.data, pmoQuery.data]);
-  const codesLoading = generalQuery.isLoading || marketingQuery.isLoading || engineeringQuery.isLoading || etcQuery.isLoading || pmoQuery.isLoading;
-  const codesError = generalQuery.isError || marketingQuery.isError || engineeringQuery.isError || etcQuery.isError || pmoQuery.isError;
+  const codes = useMemo(() => (documentCodesQuery.data ?? []).map((item) => ({ ...item, family: '' })), [documentCodesQuery.data]);
+  const codesLoading = Boolean(createForm.originatingDivisionId) && documentCodesQuery.isLoading;
+  const codesError = documentCodesQuery.isError;
+  useEffect(() => { const valid = new Set(codes.map((code) => code.id)); setCreateForm((current) => current.documents.some((document) => document.documentCodeId && !valid.has(document.documentCodeId)) ? { ...current, documents: current.documents.map((document) => document.documentCodeId && !valid.has(document.documentCodeId) ? { ...document, documentCodeId: '' } : document) } : current); }, [codes]);
   const requests = (requestsQuery.data?.items ?? []).filter((item) => `${item.title} ${item.priority} ${item.currentState}`.toLowerCase().includes(filterText.trim().toLowerCase()));
   const bidRequests = requests.filter((item) => parentRecordId(item.bidId) !== null);
   const projectRequests = requests.filter((item) => parentRecordId(item.projectId) !== null);
@@ -152,6 +149,7 @@ function EditFormModal({ form, saving, onChange, onClose, onSubmit }: { form: Ed
 function validateStepOne(form: CreateForm, requiresResponsibleLead = false) { const parent = form.parentType === 'BID' ? form.bidId.trim() : form.projectId.trim(); if (!parent) return `Select one ${form.parentType === 'BID' ? 'Bid' : 'Direct Project'} parent before continuing.`; if (!form.title.trim()) return 'Title is required.'; if (form.title.trim().length > 260) return 'Title must be 260 characters or fewer.'; if (!WORK_REQUEST_PRIORITIES.includes(form.priority)) return 'Select a valid priority.'; if (form.notes.length > 10000) return 'Notes must be 10,000 characters or fewer.'; if (!form.originatingDivisionId) return 'Select an Originating Division.'; if (requiresResponsibleLead && !form.responsibleOriginatingDivisionLeadId) return 'Select the Responsible Originating Division Lead.'; return null; }
 function validate(form: CreateForm, requiresResponsibleLead = false) { const stepOne = validateStepOne(form, requiresResponsibleLead); if (stepOne) return stepOne; if (!form.intermediateDivisionIds.length || form.intermediateDivisionIds.some((id) => !id)) return 'Add and select at least one intermediate Division.'; if (form.documents.length > MAX_DOCUMENTS) return `A Work Request can include at most ${MAX_DOCUMENTS} initial documents.`; if (form.documents.some((doc) => !doc.documentCodeId || !doc.file)) return 'Every initial document needs both a Document Code and a file.'; return null; }
 function normalizeCodes(families: Array<[string, Array<{ id: string; code: string; name: string; isActive: boolean }>]>) { const result = new Map<string, CodeOption>(); families.forEach(([family, items]) => items.filter((item) => item.isActive).forEach((item) => { if (!result.has(item.id)) result.set(item.id, { id: item.id, code: item.code, name: item.name, family }); })); return [...result.values()].sort((left, right) => `${left.family}:${left.code}:${left.name}`.localeCompare(`${right.family}:${right.code}:${right.name}`)); }
+void normalizeCodes;
 function parentRecordId(value: WorkRequest['bidId'] | WorkRequest['projectId']) { if (typeof value === 'string') return value; return value && typeof value.id === 'string' ? value.id : null; }
 function workRequestParentType(item: WorkRequest) { return parentRecordId(item.bidId) ? 'Bid' : parentRecordId(item.projectId) ? 'Direct Project' : 'Unassigned'; }
 function workRequestParentReference(item: WorkRequest) { const id = parentRecordId(item.bidId) ?? parentRecordId(item.projectId); return id ? id.slice(0, 8).toUpperCase() : 'No parent reference'; }

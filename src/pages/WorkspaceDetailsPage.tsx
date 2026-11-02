@@ -1,19 +1,25 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState, type FormEvent } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { usePageTitle } from '@/hooks/usePageTitle';
-import { getBid, type Bid } from '@/services/bidService';
+import { getBid, updateBid, type Bid } from '@/services/bidService';
 import { getProject, type Project } from '@/services/projectService';
 import { getWorkRequests, type WorkRequest } from '@/services/workRequestService';
 import { formatDateTime } from '@/features/workRequests/workflowPresentation';
 import { WorkspaceLoadingState } from '@/components/ui/LoadingState';
 import { usePermissions } from '@/hooks/usePermissions';
+import { readableApiError } from '@/services/roleService';
 
 type WorkspaceKind = 'bid' | 'project';
 type Workspace = Bid | Project;
 
 export function WorkspaceDetailsPage({ kind }: { kind: WorkspaceKind }) {
   const { can } = usePermissions();
+  const queryClient = useQueryClient();
   const { id } = useParams();
+  const [editingBid, setEditingBid] = useState(false);
+  const [bidName, setBidName] = useState('');
   const label = kind === 'bid' ? 'Bid' : 'Project';
   usePageTitle(`${label} Details`);
 
@@ -25,6 +31,20 @@ export function WorkspaceDetailsPage({ kind }: { kind: WorkspaceKind }) {
   const workRequestsQuery = useQuery({ queryKey: ['work-requests'], queryFn: getWorkRequests, enabled: Boolean(id) && can('VIEW_WORK_REQUEST') });
   const workspace = workspaceQuery.data as Workspace | undefined;
   const workRequests = (workRequestsQuery.data?.items ?? []).filter((request) => parentId(kind === 'bid' ? request.bidId : request.projectId) === id);
+
+  const updateBidMutation = useMutation({
+    mutationFn: (name: string) => updateBid(id!, { name }),
+    onSuccess: async () => {
+      toast.success('Bid updated successfully.');
+      setEditingBid(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['bid', id] }),
+        queryClient.invalidateQueries({ queryKey: ['bids', id] }),
+        queryClient.invalidateQueries({ queryKey: ['bids'] }),
+      ]);
+    },
+    onError: (error) => toast.error(readableApiError(error, 'Unable to update the bid.')),
+  });
 
   if (!id) return <WorkspaceNotFound label={label} />;
 
@@ -41,6 +61,7 @@ export function WorkspaceDetailsPage({ kind }: { kind: WorkspaceKind }) {
     {workspaceQuery.isLoading ? <WorkspaceLoadingState entity={label} /> : null}
     {workspaceQuery.isError ? <WorkspaceNotFound label={label} /> : null}
     {workspace && !workspaceQuery.isError ? <><WorkspaceSummary kind={kind} workspace={workspace} />
+      {kind === 'bid' ? <BidActionArea bid={workspace as Bid} can={can} editing={editingBid} name={bidName} onEdit={() => { setBidName((workspace as Bid).name); setEditingBid(true); }} onCancel={() => setEditingBid(false)} onNameChange={setBidName} onSubmit={(event) => { event.preventDefault(); if (bidName.trim()) updateBidMutation.mutate(bidName.trim()); }} saving={updateBidMutation.isPending} /> : null}
       <section className="dash-panel division-panel workspace-details-page__requests">
         <div className="dash-section-title"><strong>Work Requests</strong><span>{workRequestsQuery.isLoading ? 'Loading Work Requests' : `${workRequests.length} associated Work Request${workRequests.length === 1 ? '' : 's'}`}</span></div>
         <div className="division-table">
@@ -53,6 +74,18 @@ export function WorkspaceDetailsPage({ kind }: { kind: WorkspaceKind }) {
       </section>
     </> : null}
   </div>;
+}
+
+function BidActionArea({ bid, can, editing, name, onEdit, onCancel, onNameChange, onSubmit, saving }: { bid: Bid; can: (permission: string) => boolean; editing: boolean; name: string; onEdit: () => void; onCancel: () => void; onNameChange: (value: string) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; saving: boolean }) {
+  const actionable = isBidActionable(bid);
+  const canEdit = can('UPDATE_BID') && actionable;
+  const canCreateWorkRequest = can('CREATE_WORK_REQUEST') && actionable;
+  if (!canEdit && !canCreateWorkRequest) return null;
+  return <section className="dash-panel division-panel workspace-details-page__actions"><div className="dash-section-title"><strong>Bid Actions</strong><span>Actions available for the active profile and current Bid state.</span></div>{editing ? <form className="division-form" onSubmit={onSubmit}><label><span>Bid name</span><input autoFocus disabled={saving} onChange={(event) => onNameChange(event.target.value)} required value={name} /></label><div className="division-form__actions"><button disabled={saving} onClick={onCancel} type="button">Cancel</button><button disabled={saving || !name.trim()} type="submit">{saving ? 'Saving...' : 'Save Bid'}</button></div></form> : <div className="division-actions">{canEdit ? <button onClick={onEdit} type="button">Edit Bid</button> : null}{canCreateWorkRequest ? <Link className="dash-critical-action" to={`/work-requests?create=1&bidId=${encodeURIComponent(bid.id)}`}>Create Work Request</Link> : null}</div>}</section>;
+}
+
+function isBidActionable(bid: Bid) {
+  return !['ARCHIVED', 'CANCELLED', 'CLOSED'].includes(bid.status.trim().toUpperCase());
 }
 
 function WorkspaceSummary({ kind, workspace }: { kind: WorkspaceKind; workspace: Workspace }) {

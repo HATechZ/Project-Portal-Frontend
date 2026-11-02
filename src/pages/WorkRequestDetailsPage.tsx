@@ -16,14 +16,9 @@ import { WorkRequestWorkflowTracker } from '@/features/workRequests/WorkRequestW
 import { toWorkRequestWorkflowViewModel } from '@/features/workRequests/workflowViewModel';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { getDivisions } from '@/services/divisionService';
-import { getActiveEngineeringDocumentCodes } from '@/services/engineeringDocumentCodeService';
-import { getActiveEtcDocumentCodes } from '@/services/etcDocumentCodeService';
-import { getActiveGeneralDocumentCodes } from '@/services/generalDocumentCodeService';
-import { getActiveMarketingDocumentCodes } from '@/services/marketingDocumentCodeService';
-import { getActiveProjectManagementOperationDocumentCodes } from '@/services/projectManagementOperationDocumentCodeService';
 import { ApiClientError } from '@/services/apiClient';
 import { readableApiError } from '@/services/roleService';
-import { getWorkRequest, getWorkRequestAvailableActions, getWorkRequestDocumentVersions, getWorkRequestDocuments, getWorkRequestEvents, getWorkRequestInternalHistory, getWorkRequestRoute, uploadWorkRequestDocuments } from '@/services/workRequestService';
+import { getWorkRequest, getWorkRequestAvailableActions, getWorkRequestAvailableDocumentCodes, getWorkRequestDocumentVersions, getWorkRequestDocuments, getWorkRequestEvents, getWorkRequestInternalHistory, getWorkRequestRoute, uploadWorkRequestDocuments } from '@/services/workRequestService';
 import { createRequestId } from '@/utils/requestId';
 import '@/features/workRequests/workRequestDetails.css';
 
@@ -43,18 +38,12 @@ export function WorkRequestDetailsPage() {
   // the active actor can open; no role or scope is reconstructed in the UI.
   const actionsQuery = useQuery({ queryKey: ['work-request', id, 'available-actions', detailQuery.data?.updatedAt ?? null], queryFn: () => getWorkRequestAvailableActions(id!), enabled: detailQuery.isSuccess });
   const documentsQuery = useQuery({ queryKey: ['work-request', id, 'documents'], queryFn: () => getWorkRequestDocuments(id!), enabled });
-  const generalCodesQuery = useQuery({ queryKey: ['general-document-codes', 'active'], queryFn: getActiveGeneralDocumentCodes, enabled: uploadOpen });
-  const marketingCodesQuery = useQuery({ queryKey: ['marketing-document-codes', 'active'], queryFn: getActiveMarketingDocumentCodes, enabled: uploadOpen });
-  const engineeringCodesQuery = useQuery({ queryKey: ['engineering-document-codes', 'active'], queryFn: getActiveEngineeringDocumentCodes, enabled: uploadOpen });
-  const etcCodesQuery = useQuery({ queryKey: ['etc-document-codes', 'active'], queryFn: getActiveEtcDocumentCodes, enabled: uploadOpen });
-  const pmoCodesQuery = useQuery({ queryKey: ['project-management-operation-document-codes', 'active'], queryFn: getActiveProjectManagementOperationDocumentCodes, enabled: uploadOpen });
+  const documentCodesQuery = useQuery({ queryKey: ['work-request', id, 'available-document-codes'], queryFn: () => getWorkRequestAvailableDocumentCodes(id!), enabled: uploadOpen && enabled });
   const eventsQuery = useQuery({ queryKey: ['work-request', id, 'events', 1, 20], queryFn: () => getWorkRequestEvents(id!, 1, 20), enabled });
   const documents = recordList(documentsQuery.data, ['items', 'documents']);
-  const documentCodes = useMemo(() => normalizeDocumentCodes([
-    ['General', generalCodesQuery.data ?? []], ['Marketing', marketingCodesQuery.data ?? []], ['Engineering', engineeringCodesQuery.data ?? []], ['ETC', etcCodesQuery.data ?? []], ['Project Management & Operations', pmoCodesQuery.data ?? []],
-  ]), [generalCodesQuery.data, marketingCodesQuery.data, engineeringCodesQuery.data, etcCodesQuery.data, pmoCodesQuery.data]);
-  const documentCodesLoading = generalCodesQuery.isLoading || marketingCodesQuery.isLoading || engineeringCodesQuery.isLoading || etcCodesQuery.isLoading || pmoCodesQuery.isLoading;
-  const documentCodesError = generalCodesQuery.isError || marketingCodesQuery.isError || engineeringCodesQuery.isError || etcCodesQuery.isError || pmoCodesQuery.isError;
+  const documentCodes = (documentCodesQuery.data ?? []).map((code) => ({ id: code.id, code: code.code, name: code.name, family: '' }));
+  const documentCodesLoading = documentCodesQuery.isLoading;
+  const documentCodesError = documentCodesQuery.isError;
   const uploadMutation = useMutation({
     mutationFn: () => uploadWorkRequestDocuments(id!, pendingDocuments, createRequestId()),
     onSuccess: async (response) => {
@@ -63,7 +52,10 @@ export function WorkRequestDetailsPage() {
       setPendingDocuments([]);
       await queryClient.invalidateQueries({ queryKey: ['work-request', id, 'documents'] });
     },
-    onError: (error) => toast.error(readableApiError(error, 'Unable to upload Work Request documents.')),
+    onError: async (error) => {
+      toast.error(readableApiError(error, 'Unable to upload Work Request documents.'));
+      await documentCodesQuery.refetch();
+    },
   });
 
   useEffect(() => {
@@ -133,14 +125,6 @@ type DocumentCodeOption = { id: string; code: string; name: string; family: stri
 function WorkRequestDocumentUploadModal({ attachments, codes, codesError, codesLoading, onChange, onClose, onSubmit, saving }: { attachments: PendingAttachment[]; codes: DocumentCodeOption[]; codesError: boolean; codesLoading: boolean; onChange: (attachments: PendingAttachment[]) => void; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; saving: boolean }) {
   const update = (id: string, patch: Partial<PendingAttachment>) => onChange(attachments.map((attachment) => attachment.id === id ? { ...attachment, ...patch } : attachment));
   return <div className="division-modal-backdrop"><section aria-modal="true" className="division-modal division-modal--wide work-request-document-modal" role="dialog"><div className="division-modal__head"><div><strong>Add Documents</strong><span>Attach and classify supporting files.</span></div><button aria-label="Close" disabled={saving} onClick={onClose} type="button"><X aria-hidden="true" size={17} /></button></div><form className="division-form" onSubmit={onSubmit}>{codesError ? <p>Document Codes are unavailable. Try again before adding documents.</p> : <AttachmentUpload accept={fileAccept} attachments={attachments} codes={codes} disabled={saving || codesLoading} maxFileBytes={MAX_FILE_BYTES} maxFiles={MAX_DOCUMENTS} metadataMode="document-metadata" onAdd={(files) => onChange([...attachments, ...files.map((file) => ({ ...createPendingAttachment(file), description: '', shipmentNumber: '' }))])} onDocumentCodeChange={(id, documentCodeId) => update(id, { documentCodeId })} onMetadataChange={(id, field, value) => update(id, { [field]: value })} onRemove={(id) => onChange(attachments.filter((attachment) => attachment.id !== id))} onValidationError={(message) => toast.error(message)} />}<div className="division-form__actions"><button disabled={saving} onClick={onClose} type="button">Cancel</button><button disabled={saving || codesLoading || codesError || !attachments.length} type="submit">{saving ? 'Uploading...' : 'Upload Documents'}</button></div></form></section></div>;
-}
-
-function normalizeDocumentCodes(families: Array<[string, Array<{ id: string; code: string; name: string; isActive: boolean }>]>) {
-  const result = new Map<string, DocumentCodeOption>();
-  families.forEach(([family, items]) => items.filter((item) => item.isActive).forEach((item) => {
-    if (!result.has(item.id)) result.set(item.id, { id: item.id, code: item.code, name: item.name, family });
-  }));
-  return [...result.values()].sort((left, right) => `${left.family}:${left.code}:${left.name}`.localeCompare(`${right.family}:${right.code}:${right.name}`));
 }
 
 function PageError({ title, copy, onRetry }: { title: string; copy: string; onRetry: () => void }) {

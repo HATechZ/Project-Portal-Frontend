@@ -196,6 +196,13 @@ export type WorkRequestDocumentUploadResponse = {
   latestVersion: unknown;
 };
 
+export type AvailableDocumentCode = {
+  id: string;
+  code: string;
+  name: string;
+  [key: string]: unknown;
+};
+
 export type CreateWorkRequestResponseData = {
   id: string;
   bidId: string | null;
@@ -304,6 +311,16 @@ export function updateWorkRequest(id: string, payload: UpdateWorkRequestPayload)
 
 export function getWorkRequestDocuments(id: string) {
   return apiClient<ApiResponse<unknown>>(`${requestPath(id)}/documents`).then((response) => response.data);
+}
+
+/** Context-aware selector. The backend enforces upload permission and route context. */
+export function getWorkRequestAvailableDocumentCodes(id: string) {
+  return apiClient<ApiResponse<AvailableDocumentCode[]>>(`${requestPath(id)}/documents/available-document-codes`).then((response) => response.data);
+}
+
+export function getWorkRequestCreationAvailableDocumentCodes(originatingDivisionId: string) {
+  const params = new URLSearchParams({ originatingDivisionId });
+  return apiClient<ApiResponse<AvailableDocumentCode[]>>(`/work-requests/creation/available-document-codes?${params.toString()}`).then((response) => response.data);
 }
 
 export function uploadWorkRequestDocuments(id: string, documents: CreateWorkRequestDocumentInput[], requestId: string) {

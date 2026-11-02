@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { Check, Plus, Search, X } from 'lucide-react';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { WorkspaceLoadingState } from '@/components/ui/LoadingState';
+import { resolvePermissionDependencies, toggleExplicitPermission } from '@/utils/permissionDependencies';
 import {
   createPolCode,
   deactivatePolCode,
@@ -118,10 +119,8 @@ import {
   getPermissions,
   getUserRoleOptions,
   getUserRoles,
-  internalCustomRoleScopes,
   readableApiError,
   revokeUserRole,
-  permissionsCompatibleWithScope,
   updateRolePermissions,
   type AccessRole,
   type Permission,
@@ -147,29 +146,6 @@ const engineeringDocumentCodesQueryKey = ['engineering-document-codes'] as const
 const deactivatedEngineeringDocumentCodesQueryKey = ['engineering-document-codes', 'deactivated'] as const;
 const designationsQueryKey = ['designations'] as const;
 const accessRolesQueryKey = ['access-roles'] as const;
-
-type InternalRoleScope = (typeof internalCustomRoleScopes)[number];
-
-const roleScopeMetadata: Record<InternalRoleScope, { label: string; description: string }> = {
-  company: { label: 'Company', description: 'Access permitted resources across the company according to granted permissions.' },
-  division: { label: 'Division', description: 'Access permitted resources within applicable division context.' },
-  team: { label: 'Team', description: 'Access permitted resources within applicable team context.' },
-  member: { label: 'Member', description: 'Access permitted resources assigned/related to the member.' },
-};
-
-function isInternalRoleScope(scope: string | null | undefined): scope is InternalRoleScope {
-  return typeof scope === 'string' && internalCustomRoleScopes.includes(scope.trim().toLowerCase() as InternalRoleScope);
-}
-
-function roleScopeLabel(scope: string | null | undefined) {
-  const normalizedScope = scope?.trim().toLowerCase() ?? '';
-  return isInternalRoleScope(normalizedScope) ? roleScopeMetadata[normalizedScope].label : normalizedScope || 'Unspecified';
-}
-
-function roleScopeDescription(scope: string | null | undefined) {
-  const normalizedScope = scope?.trim().toLowerCase() ?? '';
-  return isInternalRoleScope(normalizedScope) ? roleScopeMetadata[normalizedScope].description : '';
-}
 
 function DivisionLeadModal({ division, members, currentLeadId, loadingLead, saving, value, onChange, onClose, onSave }: { division: Division; members: Member[]; currentLeadId: string | null; loadingLead: boolean; saving: boolean; value: string; onChange: (value: string) => void; onClose: () => void; onSave: () => void }) {
   return <div className="division-modal-backdrop" role="presentation"><section aria-modal="true" className="division-modal" role="dialog"><div className="division-modal__head"><div><strong>Assign Division Lead</strong><span>{division.name} ({division.abbr})</span></div><button aria-label="Close division lead dialog" disabled={saving} onClick={onClose} type="button">X</button></div><div className="division-form"><label><span>Member</span><select disabled={loadingLead || saving} onChange={(event) => onChange(event.target.value)} value={value}><option value="">{loadingLead ? 'Loading current lead...' : 'Select a member'}</option>{members.filter((member) => member.isActive).map((member) => <option key={member.id} value={member.id}>{member.name} — {member.email}</option>)}</select></label>{currentLeadId ? <p className="division-form__hint">Choosing another member replaces the current division lead.</p> : null}<div className="division-form__actions"><button disabled={saving} onClick={onClose} type="button">Cancel</button><button disabled={!value || loadingLead || saving} onClick={onSave} type="button">{saving ? 'Assigning...' : 'Assign Lead'}</button></div></div></section></div>;
@@ -254,8 +230,9 @@ export function SettingsPage() {
   const [roleDescription, setRoleDescription] = useState('');
   const [roleScope, setRoleScope] = useState('');
   const [permissionIds, setPermissionIds] = useState<string[]>([]);
+  const [manualPermissionIds, setManualPermissionIds] = useState<string[]>([]);
+  const [dependenciesEnabled, setDependenciesEnabled] = useState(false);
   const [permissionCategories, setPermissionCategories] = useState<string[]>([]);
-  const [scopeCompatibilityNotice, setScopeCompatibilityNotice] = useState('');
   const [accessUser, setAccessUser] = useState<Member | null>(null);
   const [divisionLeadTarget, setDivisionLeadTarget] = useState<Division | null>(null);
   const [divisionLeadMemberId, setDivisionLeadMemberId] = useState('');
@@ -326,7 +303,8 @@ export function SettingsPage() {
   const accessRolesQuery = useQuery({ queryKey: accessRolesQueryKey, queryFn: getAccessRoles });
   const roleDetailsQuery = useQuery({ queryKey: ['access-role', selectedRole?.id], queryFn: () => getAccessRole(selectedRole!.id), enabled: roleModal === 'permissions' && Boolean(selectedRole?.id) });
   const permissionsQuery = useQuery({ queryKey: ['permissions', roleScope], queryFn: () => getPermissions(roleScope), enabled: roleModal !== null && Boolean(roleScope) });
-  const compatiblePermissions = useMemo(() => permissionsCompatibleWithScope(permissionsQuery.data ?? [], roleScope), [permissionsQuery.data, roleScope]);
+  // The scoped permissions endpoint is the authoritative catalogue for this role scope.
+  const compatiblePermissions = useMemo(() => permissionsQuery.data ?? [], [permissionsQuery.data]);
   const incompatiblePermissionIds = useMemo(() => {
     const compatibleIds = new Set(compatiblePermissions.map((permission) => permission.id));
     return permissionIds.filter((permissionId) => !compatibleIds.has(permissionId));
@@ -381,26 +359,6 @@ export function SettingsPage() {
   function resolvePermissionIds(values: string[]) {
     return [...new Set(values.map((value) => permissionsQuery.data?.find((permission) => permission.id === value || permission.code === value)?.id ?? value))];
   }
-
-  // The permission endpoint (and compatibleScopes returned by it) is the source
-  // of truth for scope compatibility. Retain every selected permission the new
-  // scope accepts, and remove only those the backend marks incompatible.
-  useEffect(() => {
-    if (!roleModal || !roleScope || !permissionsQuery.isSuccess) return;
-    const compatibleIds = new Set(compatiblePermissions.map((permission) => permission.id));
-    setPermissionIds((current) => {
-      const retained = current.filter((permissionId) => compatibleIds.has(permissionId));
-      if (retained.length === current.length) return current;
-      setScopeCompatibilityNotice(`${current.length - retained.length} incompatible permission${current.length - retained.length === 1 ? '' : 's'} removed for the ${roleScopeLabel(roleScope)} scope.`);
-      return retained;
-    });
-  }, [compatiblePermissions, permissionsQuery.isSuccess, roleModal, roleScope]);
-
-  useEffect(() => {
-    if (roleModal !== 'permissions' || !roleDetailsQuery.data) return;
-    setRoleScope(roleDetailsQuery.data.scope ?? '');
-    setPermissionIds(roleDetailsQuery.data.permissions.map((permission) => permission.id));
-  }, [roleDetailsQuery.data, roleModal]);
 
   useEffect(() => {
     if (editingCode && codeDetailsQuery.data) setName(codeDetailsQuery.data.name);
@@ -473,9 +431,15 @@ export function SettingsPage() {
       setSelectedRole(roleDetailsQuery.data);
       setRoleScope(roleDetailsQuery.data.scope);
       setPermissionIds(roleDetailsQuery.data.permissions.map((permission) => permission.id));
+      setManualPermissionIds(roleDetailsQuery.data.permissions.map((permission) => permission.id));
+      setDependenciesEnabled(false);
       setPermissionCategories([]);
     }
   }, [roleModal, roleDetailsQuery.data]);
+
+  useEffect(() => {
+    if (roleModal && dependenciesEnabled) setPermissionIds(resolvePermissionDependencies(manualPermissionIds, compatiblePermissions));
+  }, [compatiblePermissions, dependenciesEnabled, manualPermissionIds, roleModal]);
 
   const refreshPolCodes = () => Promise.all([queryClient.invalidateQueries({ queryKey: polCodesQueryKey }), queryClient.invalidateQueries({ queryKey: deactivatedPolCodesQueryKey })]);
   const refreshPodCodes = () => Promise.all([queryClient.invalidateQueries({ queryKey: podCodesQueryKey }), queryClient.invalidateQueries({ queryKey: deactivatedPodCodesQueryKey })]);
@@ -795,15 +759,16 @@ export function SettingsPage() {
     setRoleDescription('');
     setRoleScope('');
     setPermissionIds([]);
+    setManualPermissionIds([]);
+    setDependenciesEnabled(false);
     setPermissionCategories([]);
-    setScopeCompatibilityNotice('');
     setRoleModal('create');
   }
-  function openPermissions(role: AccessRole) { setSelectedRole(role); setRoleName(role.name); setRoleDescription(role.description ?? ''); setRoleScope(role.scope ?? ''); setPermissionIds(role.permissions.map((permission) => permission.id)); setPermissionCategories([]); setScopeCompatibilityNotice(''); setRoleModal('permissions'); }
-  function closeRoleModal() { setRoleModal(null); setSelectedRole(null); setPermissionIds([]); setPermissionCategories([]); setScopeCompatibilityNotice(''); }
-  function changeRoleScope(scope: string) { setRoleScope(scope); setPermissionCategories([]); setScopeCompatibilityNotice(''); }
-  function togglePermission(id: string) { setPermissionIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]); }
-  function togglePermissionGroup(ids: string[]) { setPermissionIds((current) => ids.every((id) => current.includes(id)) ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]); }
+  function openPermissions(role: AccessRole) { const ids = role.permissions.map((permission) => permission.id); setSelectedRole(role); setRoleName(role.name); setRoleDescription(role.description ?? ''); setRoleScope(role.scope); setPermissionIds(ids); setManualPermissionIds(ids); setDependenciesEnabled(false); setPermissionCategories([]); setRoleModal('permissions'); }
+  function closeRoleModal() { setRoleModal(null); setSelectedRole(null); setPermissionIds([]); setManualPermissionIds([]); setDependenciesEnabled(false); setPermissionCategories([]); }
+  function changeRoleScope(scope: string) { setRoleScope(scope); setPermissionCategories([]); }
+  function togglePermission(id: string) { setDependenciesEnabled(true); setManualPermissionIds((current) => toggleExplicitPermission(current, permissionIds, id)); }
+  function togglePermissionGroup(ids: string[]) { setDependenciesEnabled(true); setManualPermissionIds((current) => ids.every((id) => permissionIds.includes(id)) ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]); }
   function submitRole(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!roleName.trim()) { toast.error('Enter a role name so users can identify this access level.'); return; }
@@ -940,15 +905,21 @@ export function SettingsPage() {
   const safeSettingsPage = Math.min(settingsPage, settingsTotalPages);
   visiblePolCodes = pageItems(visiblePolCodes, safeSettingsPage); visiblePodCodes = pageItems(visiblePodCodes, safeSettingsPage); visibleCargoCodes = pageItems(visibleCargoCodes, safeSettingsPage); visibleVesselCodes = pageItems(visibleVesselCodes, safeSettingsPage); visibleDesignations = pageItems(visibleDesignations, safeSettingsPage); visibleRoles = pageItems(visibleRoles, safeSettingsPage);
   useEffect(() => { setSettingsPage(1); }, [settingsCategory, locationTab, cargoVesselTab, settingsSearch, statusFilter]);
-  // Internal custom roles have these four backend-supported scopes. Do not
-  // derive selector choices from existing roles: that hid company until a role
-  // using it happened to exist, and could expose external portal scopes.
-  const availableRoleScopes = internalCustomRoleScopes;
+  // Scopes are owned by the access-role API. Keep the currently opened role's
+  // returned scope in the list as well, so its value remains visible while the
+  // role list refreshes or is filtered by the server.
+  const availableRoleScopes = [...new Set([
+    ...(accessRolesQuery.data ?? []).map((role) => role.scope),
+    selectedRole?.scope ?? '',
+    roleDetailsQuery.data?.scope ?? '',
+  ].filter((scope): scope is string => typeof scope === 'string').map((scope) => scope.trim()).filter(Boolean))].sort((left, right) => left.localeCompare(right));
+  // A new role has no saved scope yet. Choose the first scope already supplied
+  // by the role API so its compatible permission categories can load immediately.
   useEffect(() => {
-    if (roleModal === 'create' && !roleScope) {
-      setRoleScope('company');
+    if (roleModal === 'create' && !roleScope && availableRoleScopes[0]) {
+      setRoleScope(availableRoleScopes[0]);
     }
-  }, [roleModal, roleScope]);
+  }, [availableRoleScopes, roleModal, roleScope]);
   const workspaceDivisionNames = new Map((workspaceDivisionsQuery.data?.items ?? []).map((division) => [division.id, division.name]));
   const memberDivisionName = (member: Member) => member.division?.name ?? workspaceDivisionNames.get(member.divisionId) ?? 'Not assigned';
   const settingsSearchPlaceholder = settingsCategory === 'location' ? `Search ${locationTab.toUpperCase()} codes...` : settingsCategory === 'cargo' ? `Search ${cargoVesselTab} codes...` : settingsCategory === 'documents' ? `Search ${documentTab === 'operation' ? 'PM & Operation' : documentTab} document codes...` : settingsCategory === 'access' ? 'Search roles...' : settingsCategory === 'workspace' ? 'Search workspace records...' : 'Search designations...';
@@ -985,7 +956,7 @@ export function SettingsPage() {
           {accessRolesQuery.isError ? <div className="division-empty">Unable to load roles. Refresh the page to try again.</div> : null}
           {!accessRolesQuery.isLoading && !accessRolesQuery.isError && !(accessRolesQuery.data ?? []).length ? <div className="division-empty">No roles are available. Create a role to define access for your team.</div> : null}
           {!accessRolesQuery.isLoading && !accessRolesQuery.isError && !(visibleRoles).length && (accessRolesQuery.data ?? []).length ? <div className="division-empty">No matching roles found. Try adjusting your search.</div> : null}
-          {visibleRoles.map((role) => <div className="role-grid" key={role.id}><span><strong>{role.name}</strong><small>{role.description || role.code} · {roleScopeLabel(role.scope)} scope</small></span><span>{role.permissions.length} permission{role.permissions.length === 1 ? '' : 's'}</span><span><em className={role.isSystemRole ? 'division-status' : 'division-status division-status--active'}>{role.isSystemRole ? 'System' : 'Custom'}</em></span><span className="division-actions"><button onClick={() => openPermissions(role)} type="button">Manage Permissions</button></span></div>)}
+          {visibleRoles.map((role) => <div className="role-grid" key={role.id}><span><strong>{role.name}</strong><small>{role.description || role.code}</small></span><span>{role.permissions.length} permission{role.permissions.length === 1 ? '' : 's'}</span><span><em className={role.isSystemRole ? 'division-status' : 'division-status division-status--active'}>{role.isSystemRole ? 'System' : 'Custom'}</em></span><span className="division-actions"><button onClick={() => openPermissions(role)} type="button">Manage Permissions</button></span></div>)}
         </div>
       </section> : null}
       {settingsCategory === 'location' && locationTab === 'pol' ? <section className="dash-panel division-panel settings-configuration-panel">
@@ -1091,7 +1062,7 @@ export function SettingsPage() {
       {settingsCategory !== 'documents' && settingsCategory !== 'workspace' ? <TablePagination onPageChange={setSettingsPage} page={safeSettingsPage} total={settingsTotalPages} /> : null}
       {designationDeleteConfirmation ? <div className="division-modal-backdrop" role="presentation"><section aria-labelledby="delete-designation-title" aria-modal="true" className="division-modal status-confirmation-dialog" role="dialog"><div className="division-modal__head"><div><strong id="delete-designation-title">Delete designation?</strong><span>This action cannot be undone. Members using this designation may need to be updated.</span></div><button aria-label="Close delete confirmation" onClick={() => setDesignationDeleteConfirmation(null)} type="button">X</button></div><div className="status-confirmation-dialog__body"><p><strong>{designationDeleteConfirmation.name}</strong></p><p>Do you want to continue?</p></div><div className="division-form__actions"><button onClick={() => setDesignationDeleteConfirmation(null)} type="button">Cancel</button><button className="status-confirmation-dialog__deactivate" disabled={deleteDesignationMutation.isPending} onClick={() => { const designation = designationDeleteConfirmation; setDesignationDeleteConfirmation(null); deleteDesignationMutation.mutate(designation.id); }} type="button">{deleteDesignationMutation.isPending ? 'Deleting...' : 'Delete'}</button></div></section></div> : null}
       {statusConfirmation ? <div className="division-modal-backdrop" role="presentation"><section aria-labelledby="status-confirmation-title" aria-modal="true" className="division-modal status-confirmation-dialog" role="dialog"><div className="division-modal__head"><div><strong id="status-confirmation-title">{statusConfirmation.isActive ? 'Deactivate configuration item?' : 'Reactivate configuration item?'}</strong><span>{statusConfirmation.isActive ? 'This item will no longer be available for new selections.' : 'This item will become available for new selections again.'}</span></div><button aria-label="Close confirmation dialog" onClick={() => setStatusConfirmation(null)} type="button">X</button></div><div className="status-confirmation-dialog__body"><p><strong>{statusConfirmation.name}</strong></p><p>Do you want to continue?</p></div><div className="division-form__actions"><button onClick={() => setStatusConfirmation(null)} type="button">Cancel</button><button className={statusConfirmation.isActive ? 'status-confirmation-dialog__deactivate' : 'status-confirmation-dialog__reactivate'} onClick={() => { const confirmation = statusConfirmation; setStatusConfirmation(null); confirmation.onConfirm(); }} type="button">{statusConfirmation.isActive ? 'Deactivate' : 'Reactivate'}</button></div></section></div> : null}
-      {roleModal ? <RolePermissionWorkspace categories={permissionCategories} description={roleDescription} mode={roleModal} name={roleName} onCategoriesChange={setPermissionCategories} onClose={closeRoleModal} onDescriptionChange={setRoleDescription} onNameChange={setRoleName} onScopeChange={changeRoleScope} onSubmit={submitRole} onToggleGroup={togglePermissionGroup} onTogglePermission={togglePermission} permissionIds={permissionIds} permissions={compatiblePermissions} permissionsError={permissionsQuery.isError} permissionsLoading={permissionsQuery.isLoading} saving={roleModal === 'create' ? createRoleMutation.isPending : updatePermissionsMutation.isPending} scope={roleScope} scopeCompatibilityNotice={scopeCompatibilityNotice} scopeLocked={Boolean(selectedRole?.isSystemRole)} scopes={[...availableRoleScopes]} scopesLoading={false} /> : null}
+      {roleModal ? <RolePermissionWorkspace categories={permissionCategories} description={roleDescription} mode={roleModal} name={roleName} onCategoriesChange={setPermissionCategories} onClose={closeRoleModal} onDescriptionChange={setRoleDescription} onNameChange={setRoleName} onScopeChange={changeRoleScope} onSubmit={submitRole} onToggleGroup={togglePermissionGroup} onTogglePermission={togglePermission} permissionIds={permissionIds.filter((permissionId) => compatiblePermissions.some((permission) => permission.id === permissionId))} permissions={compatiblePermissions} permissionsError={permissionsQuery.isError} permissionsLoading={permissionsQuery.isLoading} saving={roleModal === 'create' ? createRoleMutation.isPending : updatePermissionsMutation.isPending} scope={roleScope} scopes={availableRoleScopes} scopesLoading={accessRolesQuery.isLoading && !availableRoleScopes.length} /> : null}
       {accessUser ? <div className="division-modal-backdrop" role="presentation"><section aria-modal="true" className="division-modal role-modal" role="dialog"><div className="division-modal__head"><div><strong>Manage User Access</strong><span>Select a user, then assign or remove roles.</span></div><button aria-label="Close user access dialog" onClick={() => setAccessUser(null)} type="button">X</button></div><div className="division-form"><label><span>User</span><select onChange={(event) => { const member = (membersForAccessQuery.data?.items ?? []).find((value) => value.id === event.target.value); setAccessUser(member ?? accessUser); }} value={accessUser.id}><option value="">Select a user</option>{(membersForAccessQuery.data?.items ?? []).filter((member) => member.userId && member.isActive).map((member) => <option key={member.id} value={member.id}>{member.name} — {member.email}</option>)}</select></label>{!membersForAccessQuery.isLoading && !(membersForAccessQuery.data?.items ?? []).filter((member) => member.userId).length ? <p className="role-form-error">No active portal users are available. Create a member with a linked user account first.</p> : null}{accessUser.userId ? <><div className="role-assignment"><strong>Assigned roles</strong>{userRolesQuery.isLoading ? <p>Loading assigned roles...</p> : null}{userRolesQuery.isError ? <p className="role-form-error">Unable to load this user’s roles. Please try again.</p> : null}{(userRolesQuery.data ?? []).length ? (userRolesQuery.data ?? []).map((assignment) => <div className="role-assignment__row" key={assignment.id}><span><strong>{assignment.role.name}</strong><small>{assignment.role.scope} scope · assigned {formatDate(assignment.assignedAt)}</small></span><button disabled={revokeRoleMutation.isPending} onClick={() => handleRevokeRole(assignment.role)} type="button">{revokeRoleMutation.isPending && revokeRoleMutation.variables === assignment.role.id ? 'Removing...' : 'Remove'}</button></div>) : !userRolesQuery.isLoading ? <p>No roles are assigned yet.</p> : null}</div><div className="role-assignment"><strong>Available roles</strong>{roleOptionsQuery.isLoading ? <p>Loading roles that can be assigned...</p> : null}{roleOptionsQuery.isError ? <p className="role-form-error">Unable to load role options for this user.</p> : null}{(roleOptionsQuery.data ?? []).map((role) => <div className="role-assignment__row" key={role.id}><span><strong>{role.name}</strong><small>{role.scope} scope</small></span><button disabled={assignRoleMutation.isPending} onClick={() => assignRoleMutation.mutate(role.id)} type="button">{assignRoleMutation.isPending && assignRoleMutation.variables === role.id ? 'Assigning...' : 'Assign'}</button></div>)}</div></> : <p>Select a user to view role assignments and available roles.</p>}<div className="division-form__actions"><button onClick={() => setAccessUser(null)} type="button">Done</button></div></div></section></div> : null}
       {divisionLeadTarget ? <DivisionLeadModal currentLeadId={divisionLeadQuery.data?.member.id ?? null} division={divisionLeadTarget} loadingLead={divisionLeadQuery.isLoading} members={workspaceMembersQuery.data?.items ?? []} onChange={setDivisionLeadMemberId} onClose={() => { setDivisionLeadTarget(null); setDivisionLeadMemberId(''); }} onSave={() => setDivisionLeadMutation.mutate({ divisionId: divisionLeadTarget.id, memberId: divisionLeadMemberId })} saving={setDivisionLeadMutation.isPending} value={divisionLeadMemberId} /> : null}
       {divisionRosterTarget ? <WorkspaceRosterModal lead={divisionRosterLeadQuery.data?.member ?? null} loading={divisionRosterLeadQuery.isLoading} members={(workspaceMembersQuery.data?.items ?? []).filter((member) => member.divisionId === divisionRosterTarget.id)} onClose={() => setDivisionRosterTarget(null)} title={`${divisionRosterTarget.name} Division`} /> : null}
@@ -1173,20 +1144,20 @@ function CompactRolePermissionModal({ mode, name, description, scope, scopes, sc
 
 void CompactRolePermissionModal;
 
-function RolePermissionWorkspace({ mode, name, description, scope, scopes, scopesLoading, permissions, permissionIds, categories: selectedCategories, permissionsLoading, permissionsError, saving, scopeLocked, scopeCompatibilityNotice, onCategoriesChange, onScopeChange, onTogglePermission, onToggleGroup, onSubmit, onClose, onNameChange, onDescriptionChange }: { mode: 'create' | 'permissions'; name: string; description: string; scope: string; scopes: string[]; scopesLoading: boolean; permissions: Permission[]; permissionIds: string[]; categories: string[]; permissionsLoading: boolean; permissionsError: boolean; saving: boolean; scopeLocked: boolean; scopeCompatibilityNotice: string; onCategoriesChange: (values: string[]) => void; onScopeChange: (value: string) => void; onTogglePermission: (id: string) => void; onToggleGroup: (ids: string[]) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onClose: () => void; onNameChange: (value: string) => void; onDescriptionChange: (value: string) => void }) {
+function RolePermissionWorkspace({ mode, name, description, scope, scopes, scopesLoading, permissions, permissionIds, categories: selectedCategories, permissionsLoading, permissionsError, saving, onCategoriesChange, onScopeChange, onTogglePermission, onToggleGroup, onSubmit, onClose, onNameChange, onDescriptionChange }: { mode: 'create' | 'permissions'; name: string; description: string; scope: string; scopes: string[]; scopesLoading: boolean; permissions: Permission[]; permissionIds: string[]; categories: string[]; permissionsLoading: boolean; permissionsError: boolean; saving: boolean; onCategoriesChange: (values: string[]) => void; onScopeChange: (value: string) => void; onTogglePermission: (id: string) => void; onToggleGroup: (ids: string[]) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onClose: () => void; onNameChange: (value: string) => void; onDescriptionChange: (value: string) => void }) {
   const [search, setSearch] = useState('');
   const [selectedExpanded, setSelectedExpanded] = useState(false);
   const isCreate = mode === 'create';
-  const categories = [...new Set(permissions.map((permission) => permission.category?.trim() || 'Uncategorized'))].sort();
+  const categories = [...new Set(permissions.map((permission) => permission.module?.trim() || 'General'))].sort();
   const activeCategory = selectedCategories[0] ?? '';
-  const activePermissions = permissions.filter((permission) => (permission.category?.trim() || 'Uncategorized') === activeCategory && [permission.displayName, permission.name ?? '', permission.code, permission.description ?? ''].some((value) => value.toLowerCase().includes(search.trim().toLowerCase())));
+  const activePermissions = permissions.filter((permission) => (permission.module?.trim() || 'General') === activeCategory && [permission.displayName, permission.name ?? '', permission.code, permission.description ?? ''].some((value) => value.toLowerCase().includes(search.trim().toLowerCase())));
   const groups = permissions.filter((permission) => permissionIds.includes(permission.id)).reduce<Record<string, Permission[]>>((result, permission) => { const category = permission.category?.trim() || 'Uncategorized'; (result[category] ??= []).push(permission); return result; }, {});
   const allSelected = activePermissions.length > 0 && activePermissions.every((permission) => permissionIds.includes(permission.id));
-  const setCategory = (category: string) => { onCategoriesChange(activeCategory === category ? [] : [category]); setSearch(''); };
+  const setCategory = (category: string) => { onCategoriesChange([category]); setSearch(''); };
   useEffect(() => {
     if (!activeCategory && categories[0]) onCategoriesChange([categories[0]]);
   }, [activeCategory, categories, onCategoriesChange]);
-  return <div className="division-modal-backdrop" role="presentation"><section aria-labelledby="workspace-title" aria-modal="true" className="permission-workspace" role="dialog"><header className="permission-workspace__header"><div><h2 id="workspace-title">{isCreate ? 'Create Role' : `Manage ${name} Permissions`}</h2><p>Configure permissions for this role.</p><strong>{permissionIds.length} selected</strong></div><div><label><span>Scope</span><select disabled={scopesLoading || saving || scopeLocked} onChange={(event) => onScopeChange(event.target.value)} value={scope}><option value="">{scopesLoading ? 'Loading…' : 'Select scope'}</option>{scopes.map((value) => <option key={value} value={value}>{roleScopeLabel(value)}</option>)}</select><small>{scopeLocked ? 'This protected role has a fixed scope.' : roleScopeDescription(scope)}</small></label><button aria-label="Close role dialog" disabled={saving} onClick={onClose} type="button"><X aria-hidden="true" size={17} /></button></div></header><form className="permission-workspace__form" onSubmit={onSubmit}>{isCreate ? <div className="permission-workspace__role-fields"><input aria-label="Role name" autoFocus maxLength={100} onChange={(event) => onNameChange(event.target.value)} placeholder="Role name" required value={name} /><input aria-label="Description" maxLength={250} onChange={(event) => onDescriptionChange(event.target.value)} placeholder="Description (optional)" value={description} /></div> : null}{scopeCompatibilityNotice ? <p className="role-form-error" role="status">{scopeCompatibilityNotice}</p> : null}<main className="permission-workspace__body"><nav aria-label="Permission categories" className="permission-workspace__categories"><h3>Categories</h3><div>{categories.map((category) => { const count = permissions.filter((permission) => permissionIds.includes(permission.id) && (permission.category?.trim() || 'Uncategorized') === category).length; return <button aria-pressed={activeCategory === category} className={activeCategory === category ? 'is-active' : ''} disabled={!scope || permissionsLoading} key={category} onClick={() => setCategory(category)} type="button"><span>{category}</span>{count ? <b>{count}</b> : activeCategory === category ? <Check aria-hidden="true" size={13} /> : null}</button>; })}</div></nav><section className="permission-workspace__active"><header><h3>{activeCategory || 'Permissions'}</h3><button disabled={!activePermissions.length || permissionsLoading} onClick={() => onToggleGroup(activePermissions.map((permission) => permission.id))} type="button">{allSelected ? 'Clear all' : 'Select all'}</button></header><label className="permission-workspace__search"><Search aria-hidden="true" size={15} /><span className="sr-only">Search permissions</span><input onChange={(event) => setSearch(event.target.value)} placeholder="Search permissions..." type="search" value={search} />{search ? <button aria-label="Clear search" onClick={() => setSearch('')} type="button"><X aria-hidden="true" size={13} /></button> : null}</label><div className="permission-workspace__permission-grid">{permissionsLoading ? <p>Loading permissions…</p> : null}{permissionsError ? <p className="role-form-error">We could not load available permissions.</p> : null}{!activeCategory && !permissionsLoading ? <p>Choose a category to view permissions.</p> : null}{activeCategory && !permissionsLoading && !permissionsError && !activePermissions.length ? <p>No permissions match this search.</p> : null}{activePermissions.map((permission) => <label className={permissionIds.includes(permission.id) ? 'is-selected' : ''} key={permission.id}><input checked={permissionIds.includes(permission.id)} onChange={() => onTogglePermission(permission.id)} type="checkbox" /><span>{permission.displayName || permission.name || permission.code}</span></label>)}</div></section><aside className={selectedExpanded ? 'permission-workspace__selected is-expanded' : 'permission-workspace__selected'}><header><h3>Selected</h3><button aria-expanded={selectedExpanded} onClick={() => setSelectedExpanded((value) => !value)} type="button">{permissionIds.length} permission{permissionIds.length === 1 ? '' : 's'}</button></header>{Object.keys(groups).length ? <div>{Object.entries(groups).sort(([left], [right]) => left.localeCompare(right)).map(([category, items]) => <section key={category}><h4>{category} <span>{items.length}</span></h4><div>{items.sort((left, right) => (left.displayName || left.code).localeCompare(right.displayName || right.code)).map((permission) => <button aria-label={`Remove ${permission.displayName || permission.code}`} key={permission.id} onClick={() => onTogglePermission(permission.id)} type="button"><span>{permission.displayName || permission.name || permission.code}</span><X aria-hidden="true" size={12} /></button>)}</div></section>)}</div> : <p>No permissions selected yet.</p>}</aside></main><footer><button disabled={saving} onClick={onClose} type="button">Cancel</button><button disabled={!scope || !permissionIds.length || permissionsLoading || saving} type="submit">{saving ? (isCreate ? 'Creating role...' : 'Saving permissions...') : isCreate ? 'Create Role' : 'Save Permissions'}</button></footer></form></section></div>;
+  return <div className="division-modal-backdrop" role="presentation"><section aria-labelledby="workspace-title" aria-modal="true" className="permission-workspace" role="dialog"><header className="permission-workspace__header"><div><h2 id="workspace-title">{isCreate ? 'Create Role' : `Manage ${name} Permissions`}</h2><p>Configure permissions for this role.</p><strong>{permissionIds.length} selected</strong></div><div><label><span>Scope</span><select disabled={scopesLoading || !scopes.length || saving} onChange={(event) => onScopeChange(event.target.value)} value={scope}><option value="">{scopesLoading ? 'Loading…' : 'Select scope'}</option>{scopes.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><button aria-label="Close role dialog" disabled={saving} onClick={onClose} type="button"><X aria-hidden="true" size={17} /></button></div></header><form className="permission-workspace__form" onSubmit={onSubmit}>{isCreate ? <div className="permission-workspace__role-fields"><input aria-label="Role name" autoFocus maxLength={100} onChange={(event) => onNameChange(event.target.value)} placeholder="Role name" required value={name} /><input aria-label="Description" maxLength={250} onChange={(event) => onDescriptionChange(event.target.value)} placeholder="Description (optional)" value={description} /></div> : null}<main className="permission-workspace__body"><nav aria-label="Permission categories" className="permission-workspace__categories"><h3>Categories</h3><div>{categories.map((category) => { const count = permissions.filter((permission) => permissionIds.includes(permission.id) && (permission.category?.trim() || 'Uncategorized') === category).length; return <button aria-pressed={activeCategory === category} className={activeCategory === category ? 'is-active' : ''} disabled={!scope || permissionsLoading} key={category} onClick={() => setCategory(category)} type="button"><span>{category}</span>{count ? <b>{count}</b> : activeCategory === category ? <Check aria-hidden="true" size={13} /> : null}</button>; })}</div></nav><section className="permission-workspace__active"><header><h3>{activeCategory || 'Permissions'}</h3><button disabled={!activePermissions.length || permissionsLoading} onClick={() => onToggleGroup(activePermissions.map((permission) => permission.id))} type="button">{allSelected ? 'Clear all' : 'Select all'}</button></header><label className="permission-workspace__search"><Search aria-hidden="true" size={15} /><span className="sr-only">Search permissions</span><input onChange={(event) => setSearch(event.target.value)} placeholder="Search permissions..." type="search" value={search} />{search ? <button aria-label="Clear search" onClick={() => setSearch('')} type="button"><X aria-hidden="true" size={13} /></button> : null}</label><div className="permission-workspace__permission-grid">{permissionsLoading ? <p>Loading permissions…</p> : null}{permissionsError ? <p className="role-form-error">We could not load available permissions.</p> : null}{!activeCategory && !permissionsLoading ? <p>Choose a category to view permissions.</p> : null}{activeCategory && !permissionsLoading && !permissionsError && !activePermissions.length ? <p>No permissions match this search.</p> : null}{activePermissions.map((permission) => <label className={permissionIds.includes(permission.id) ? 'is-selected' : ''} key={permission.id}><input checked={permissionIds.includes(permission.id)} onChange={() => onTogglePermission(permission.id)} type="checkbox" /><span>{permission.displayName || permission.name || permission.code}</span></label>)}</div></section><aside className={selectedExpanded ? 'permission-workspace__selected is-expanded' : 'permission-workspace__selected'}><header><h3>Selected</h3><button aria-expanded={selectedExpanded} onClick={() => setSelectedExpanded((value) => !value)} type="button">{permissionIds.length} permission{permissionIds.length === 1 ? '' : 's'}</button></header>{Object.keys(groups).length ? <div>{Object.entries(groups).sort(([left], [right]) => left.localeCompare(right)).map(([category, items]) => <section key={category}><h4>{category} <span>{items.length}</span></h4><div>{items.sort((left, right) => (left.displayName || left.code).localeCompare(right.displayName || right.code)).map((permission) => <button aria-label={`Remove ${permission.displayName || permission.code}`} key={permission.id} onClick={() => onTogglePermission(permission.id)} type="button"><span>{permission.displayName || permission.name || permission.code}</span><X aria-hidden="true" size={12} /></button>)}</div></section>)}</div> : <p>No permissions selected yet.</p>}</aside></main><footer><button disabled={saving} onClick={onClose} type="button">Cancel</button><button disabled={!scope || !permissionIds.length || permissionsLoading || saving} type="submit">{saving ? (isCreate ? 'Creating role...' : 'Saving permissions...') : isCreate ? 'Create Role' : 'Save Permissions'}</button></footer></form></section></div>;
 }
 
 function CodeModal({ title, editing, name, code, saving, loadingDetails, onNameChange, onCodeChange, onClose, onSubmit }: { title: string; editing: boolean; name: string; code: string; saving: boolean; loadingDetails: boolean; onNameChange: (value: string) => void; onCodeChange: (value: string) => void; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {

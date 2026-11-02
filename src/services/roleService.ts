@@ -12,9 +12,12 @@ export type Permission = {
   name?: string;
   description: string | null;
   category: string;
+  /** Backend-owned work-area grouping for role management. */
+  module: string | null;
   actionType: string;
   resource: string;
   compatibleScopes: string[];
+  requiredPermissionIds: string[];
 };
 
 export type AccessRole = {
@@ -58,21 +61,23 @@ export function getAccessRole(roleId: string) {
   return apiClient<ApiResponse<AccessRole>>(`/role/${roleId}`).then(unwrap);
 }
 
-export function getPermissions(scope?: string) {
+export function getPermissions(scope?: string, module?: string) {
   const params = new URLSearchParams({ customRole: 'true' });
   if (scope?.trim()) params.set('scope', scope.trim().toLowerCase());
+  if (module?.trim()) params.set('module', module.trim());
   const query = `?${params.toString()}`;
-  return apiClient<ApiResponse<Permission[]>>(`/permission${query}`).then(unwrap).then((permissions) => permissions.map((permission) => ({
-    ...permission,
-    name: permission.displayName,
-  })));
-}
-
-/** Filters the permission catalogue using the compatibility declared by the API. */
-export function permissionsCompatibleWithScope(permissions: Permission[], scope: string) {
-  const normalizedScope = scope.trim().toLowerCase();
-  if (!normalizedScope) return [];
-  return permissions.filter((permission) => Array.isArray(permission.compatibleScopes) && permission.compatibleScopes.some((compatibleScope) => compatibleScope.trim().toLowerCase() === normalizedScope));
+  return apiClient<ApiResponse<Permission[]>>(`/permission${query}`).then(unwrap).then((permissions) => {
+    const normalized = permissions.map((permission) => ({
+      ...permission,
+      requiredPermissionIds: Array.isArray(permission.requiredPermissionIds) ? permission.requiredPermissionIds : [],
+      name: permission.displayName,
+    }));
+    if (import.meta.env.DEV) {
+      const dependent = normalized.filter((permission) => permission.requiredPermissionIds.length);
+      console.debug('[permissions] dependency catalogue', dependent.map(({ id, code, requiredPermissionIds }) => ({ id, code, requiredPermissionIds })));
+    }
+    return normalized;
+  });
 }
 
 export function getPermission(permissionId: string) {

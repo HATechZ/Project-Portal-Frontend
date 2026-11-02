@@ -56,6 +56,7 @@ export type BidDocumentUploadResponse = {
   lastUpdatedAt: string;
   latestVersion: unknown;
 };
+export type AvailableDocumentCode = { id: string; code: string; name: string };
 
 type ApiResponse<T> = { success: boolean; message: string; data: T; timestamp: string };
 type PaginatedBids = { items: Bid[]; meta: { page: number; limit: number; total: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean } };
@@ -68,6 +69,14 @@ export function getBids() {
 
 export function getBid(id: string) {
   return apiClient<ApiResponse<Bid>>(bidPath(id)).then((response) => response.data);
+}
+
+export function getBidCreationAvailableDocumentCodes() {
+  return apiClient<ApiResponse<AvailableDocumentCode[]>>('/bids/creation/available-document-codes').then((response) => response.data);
+}
+
+export function getBidAvailableDocumentCodes(id: string) {
+  return apiClient<ApiResponse<AvailableDocumentCode[]>>(`${bidPath(id)}/documents/available-document-codes`).then((response) => response.data);
 }
 
 export function createBid(payload: CreateBidPayload) {

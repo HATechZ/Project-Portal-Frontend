@@ -73,7 +73,7 @@ export function ProfileMenu() {
             <User size={14} />
             Profile
           </button>
-          {profilesQuery.data && profilesQuery.data.length > 1 ? <><div className="profile-separator" />{profilesQuery.data.map((profile) => <button className="profile-item" disabled={profile.isDefault || activateProfileMutation.isPending} key={profile.id} onClick={() => activateProfileMutation.mutate(profile.id)} role="menuitem" type="button"><User size={14} />{profile.isDefault ? `${profile.label} (active)` : profile.label}</button>)}</> : null}
+          {profilesQuery.data && profilesQuery.data.length > 1 ? <><div className="profile-separator" />{profilesQuery.data.map((profile) => <button className="profile-item" disabled={profile.isActive || activateProfileMutation.isPending} key={profile.id} onClick={() => activateProfileMutation.mutate(profile.id)} role="menuitem" type="button"><User size={14} />{profile.isActive ? `${profile.label} (active)` : profile.label}</button>)}</> : null}
           <button className="profile-item profile-item--danger" type="button" role="menuitem" onClick={() => logoutMutation.mutate()} disabled={logoutMutation.isPending}>
             <LogOut size={14} />
             {logoutMutation.isPending ? 'Logging out...' : 'Logout'}
