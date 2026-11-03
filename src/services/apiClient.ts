@@ -1,4 +1,4 @@
-import { clearStoredUser } from '@/services/authSession';
+import { clearAuthenticatedBrowserState } from '@/services/authSession';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
@@ -31,7 +31,7 @@ export class ApiClientError extends Error {
 function clearSessionTokens() {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
-  clearStoredUser();
+  clearAuthenticatedBrowserState();
 }
 
 export type BlobApiResponse = { blob: Blob; filename: string | null };

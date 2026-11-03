@@ -1,10 +1,14 @@
 import { useEffect, useState, type PropsWithChildren } from 'react';
 import { Bell, Menu } from 'lucide-react';
+import { Navigate, useLocation } from 'react-router-dom';
 import { Sidebar } from '@/components/navigation/Sidebar';
 import { ProfileMenu } from '@/components/navigation/ProfileMenu';
 import { Button } from '@/components/ui/Button';
+import { usePermissions } from '@/hooks/usePermissions';
 
 export function DashboardLayout({ children }: PropsWithChildren) {
+  const { isAuthenticated } = usePermissions();
+  const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
@@ -23,6 +27,8 @@ export function DashboardLayout({ children }: PropsWithChildren) {
     }
     setSidebarCollapsed((value) => !value);
   }
+
+  if (!isAuthenticated) return <Navigate replace state={{ from: location.pathname }} to="/login" />;
 
   return (
     <div className="app-shell">

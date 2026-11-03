@@ -18,9 +18,11 @@ export function resolvePermissionDependencies(explicitIds: readonly string[], ca
   return [...resolved];
 }
 
-/** Updates explicit intent without allowing an auto-required dependency to be removed on its own. */
+/**
+ * Updates the current selected set. An explicit uncheck is always respected;
+ * dependency expansion happens only when a new permission is selected.
+ */
 export function toggleExplicitPermission(explicitIds: readonly string[], effectiveIds: readonly string[], id: string) {
-  if (explicitIds.includes(id)) return explicitIds.filter((value) => value !== id);
-  if (effectiveIds.includes(id)) return [...explicitIds];
+  if (effectiveIds.includes(id)) return explicitIds.filter((value) => value !== id);
   return [...explicitIds, id];
 }

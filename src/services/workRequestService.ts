@@ -384,9 +384,10 @@ function normalizeAvailableWorkflowActions(value: unknown): AvailableWorkflowAct
   return records.flatMap((item) => {
     if (typeof item === 'string' && item) return [{ code: item, label: item, targetKind: '' }];
     if (!item || typeof item !== 'object') return [];
-    const action = item as Partial<AvailableWorkflowAction>;
-    return typeof action.code === 'string' && action.code
-      ? [{ code: action.code, label: typeof action.label === 'string' && action.label ? action.label : action.code, targetKind: typeof action.targetKind === 'string' ? action.targetKind : '' }]
+    const action = item as Partial<AvailableWorkflowAction> & { actionCode?: unknown; displayName?: unknown };
+    const code = typeof action.code === 'string' && action.code ? action.code : typeof action.actionCode === 'string' ? action.actionCode : null;
+    return code
+      ? [{ code, label: typeof action.label === 'string' && action.label ? action.label : typeof action.displayName === 'string' && action.displayName ? action.displayName : code, targetKind: typeof action.targetKind === 'string' ? action.targetKind : '' }]
       : [];
   });
 }

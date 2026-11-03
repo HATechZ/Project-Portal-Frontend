@@ -57,6 +57,7 @@ export type BidDocumentUploadResponse = {
   latestVersion: unknown;
 };
 export type AvailableDocumentCode = { id: string; code: string; name: string };
+export type AvailableBidAction = { code: string; label: string };
 
 type ApiResponse<T> = { success: boolean; message: string; data: T; timestamp: string };
 type PaginatedBids = { items: Bid[]; meta: { page: number; limit: number; total: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean } };
@@ -71,12 +72,61 @@ export function getBid(id: string) {
   return apiClient<ApiResponse<Bid>>(bidPath(id)).then((response) => response.data);
 }
 
+/** The workflow service is the authorization source for Bid actions. */
+export function getBidAvailableActions(id: string) {
+  return apiClient<ApiResponse<unknown>>(`${bidPath(id)}/available-actions`).then((response) => normalizeBidActions(response.data));
+}
+
+function normalizeBidActions(value: unknown): AvailableBidAction[] {
+  const items = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? (value as { availableActions?: unknown; actions?: unknown; items?: unknown }).availableActions
+        ?? (value as { actions?: unknown }).actions
+        ?? (value as { items?: unknown }).items
+      : [];
+  if (!Array.isArray(items)) return [];
+  return items.flatMap((item): AvailableBidAction[] => {
+    if (typeof item === 'string') return [{ code: item, label: labelBidAction(item) }];
+    if (!item || typeof item !== 'object') return [];
+    const record = item as Record<string, unknown>;
+    const code = typeof record.code === 'string' ? record.code : typeof record.actionCode === 'string' ? record.actionCode : typeof record.action === 'string' ? record.action : null;
+    if (!code) return [];
+    return [{ code, label: typeof record.label === 'string' ? record.label : typeof record.displayName === 'string' ? record.displayName : typeof record.name === 'string' ? record.name : labelBidAction(code) }];
+  });
+}
+
+function labelBidAction(code: string) {
+  return code.toLowerCase().split(/[_-]+/).filter(Boolean).map((word) => `${word[0]?.toUpperCase() ?? ''}${word.slice(1)}`).join(' ');
+}
+
 export function getBidCreationAvailableDocumentCodes() {
-  return apiClient<ApiResponse<AvailableDocumentCode[]>>('/bids/creation/available-document-codes').then((response) => response.data);
+  return apiClient<ApiResponse<unknown>>('/bids/creation/available-document-codes').then((response) => normalizeAvailableDocumentCodes(response.data));
 }
 
 export function getBidAvailableDocumentCodes(id: string) {
-  return apiClient<ApiResponse<AvailableDocumentCode[]>>(`${bidPath(id)}/documents/available-document-codes`).then((response) => response.data);
+  return apiClient<ApiResponse<unknown>>(`${bidPath(id)}/documents/available-document-codes`).then((response) => normalizeAvailableDocumentCodes(response.data));
+}
+
+function normalizeAvailableDocumentCodes(value: unknown): AvailableDocumentCode[] {
+  const items = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? (value as { items?: unknown; documentCodes?: unknown; availableDocumentCodes?: unknown }).items
+        ?? (value as { documentCodes?: unknown }).documentCodes
+        ?? (value as { availableDocumentCodes?: unknown }).availableDocumentCodes
+      : [];
+
+  if (!Array.isArray(items)) return [];
+
+  return items.flatMap((item): AvailableDocumentCode[] => {
+    if (!item || typeof item !== 'object') return [];
+    const record = item as Record<string, unknown>;
+    const id = typeof record.id === 'string' ? record.id : null;
+    const code = typeof record.code === 'string' ? record.code : null;
+    const name = typeof record.name === 'string' ? record.name : null;
+    return id && code && name ? [{ id, code, name }] : [];
+  });
 }
 
 export function createBid(payload: CreateBidPayload) {

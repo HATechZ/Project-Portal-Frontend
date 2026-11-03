@@ -502,6 +502,14 @@ body {
 .dash-workspace-panel { display: flex; flex-direction: column; }
 .dash-workspace-grid { display: grid; flex: 1; grid-auto-rows: 86px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 8px; padding: 12px; }
 .dash-workspace-grid > p { grid-column: 1 / -1; margin: 8px; color: #74849a; font-size: 13px; }
+.dash-empty-state { display: flex; width: 100%; min-height: 128px; align-items: center; justify-content: center; gap: 12px; border: 1px dashed #d7e1ea; border-radius: 11px; background: #fafcfd; padding: 22px; text-align: left; }
+.dash-empty-state__icon { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border-radius: 10px; background: #edf4f6; color: #527684; }
+.dash-empty-state > div { max-width: 360px; }
+.dash-empty-state strong { display: block; color: #19313c; font-size: 13px; font-weight: 800; }
+.dash-empty-state p { margin: 5px 0 0; color: #74849a; font-size: 12px; line-height: 1.45; }
+.dash-workspace-grid > .dash-empty-state { grid-column: 1 / -1; align-self: center; }
+.dash-workspace-grid--empty { grid-auto-rows: minmax(0, 1fr); align-content: stretch; }
+.dash-workspace-grid--empty > .dash-empty-state { height: 100%; min-height: 0; }
 .dash-workspace-grid article { display: grid; grid-template-columns: 36px minmax(0, 1fr) 18px; align-items: center; gap: 12px; min-height: 86px; border: 1px solid #dfe8f0; border-radius: 11px; padding: 10px 11px; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
 .dash-workspace-grid article:hover { transform: translateY(-1px); border-color: #9dcdd0; background: #f9fdfd; }
 .dash-workspace-grid article > svg { color: #8ca2b8; }
@@ -531,6 +539,7 @@ body {
 .dash-critical-panel { overflow: hidden; }
 .dash-critical-table { overflow-x: auto; }
 .dash-critical-table > p { margin: 0; padding: 18px; color: #74849a; font-size: 13px; }
+.dash-critical-table > .dash-empty-state { margin: 14px; width: calc(100% - 28px); }
 .dash-critical-row { display: grid; grid-template-columns: minmax(200px, 1.35fr) minmax(110px, .7fr) minmax(150px, 1fr) 115px; align-items: center; gap: 15px; min-width: 690px; min-height: 67px; border-bottom: 1px solid #e9eff4; padding: 0 16px; }
 .dash-critical-row--head { min-height: 40px; background: #f4f8fb; color: #506884; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .dash-critical-row strong, .dash-critical-row small { display: block; }
@@ -545,6 +554,7 @@ body {
 .dash-activity-panel .dash-panel-head svg { color: #306cff; }
 .dash-activity-list { padding: 4px 14px; }
 .dash-activity-list > p { color: #74849a; font-size: 13px; }
+.dash-activity-list > .dash-empty-state { margin: 10px 0; }
 .dash-activity-list article { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; border-bottom: 1px solid #edf1f4; padding: 14px 0; }
 .dash-activity-list article:last-child { border-bottom: 0; }
 .dash-activity-list article > span { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; background: #f0f5fa; color: #6e839a; }
@@ -5678,6 +5688,40 @@ body { background: var(--color-page); }
 /* Final shared modal layer: retained at the end to override legacy form rules. */
 .division-modal-backdrop { z-index: 300; overflow-y: auto; padding: 24px; background: rgba(7,25,39,.52); backdrop-filter: blur(3px); }
 .division-modal { display: flex; width: min(560px,100%); max-height: min(760px,calc(100dvh - 48px)); flex-direction: column; overflow: hidden; border: 1px solid #dce5ea; border-radius: 16px; box-shadow: 0 24px 64px rgba(6,42,51,.24); }
+.division-team-management-modal { width: min(1600px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); }
+.division-team-management-modal .team-dashboard { display: flex; min-height: 0; flex: 1; flex-direction: column; margin: 0; overflow: auto; border: 0; border-radius: 0; background: #fff; box-shadow: none; }
+.division-team-management-modal .team-dashboard__heading { display: flex; flex: none; min-height: 68px; align-items: center; justify-content: flex-end; border-bottom: 1px solid #e7edf0; padding: 16px 22px; }
+.division-team-management-modal .team-dashboard__heading button { height: 36px; border: 1px solid #0b5262; border-radius: 8px; background: #0b5262; color: #fff; padding: 0 14px; font-size: 12px; font-weight: 750; }
+.division-team-management-modal .division-table { width: 100%; min-width: 0; overflow: auto; }
+.division-team-management-modal .team-dashboard .team-grid-row { width: 100%; min-width: 0; grid-template-columns: minmax(220px, 2fr) minmax(140px, 1.15fr) minmax(84px, .55fr) minmax(108px, .75fr) minmax(250px, 1.25fr); min-height: 54px; gap: clamp(8px, 1.1vw, 16px); padding: 9px clamp(16px, 1.7vw, 24px); font-size: 12px; }
+.division-team-management-modal .team-dashboard .team-grid-row--head { min-height: 40px; background: #f1f5f6; color: #355762; font-family: var(--font-sans); font-size: 11px; }
+.division-team-management-modal .team-dashboard .team-grid-row > span:first-child strong { font-size: 12px; }
+.division-team-management-modal .team-dashboard .team-grid-row > span:first-child small { font-family: inherit; font-size: 11px; }
+.division-team-management-modal .team-dashboard .team-actions { flex-wrap: nowrap; gap: 6px; }
+.division-team-management-modal .team-dashboard .team-actions button { min-width: 0; height: 32px; padding: 0 10px; font-size: 11px; }
+.division-team-management-modal__footer { display: flex; flex: none; justify-content: flex-end; border-top: 1px solid #e7edf0; background: #fff; padding: 14px 22px; }
+.division-team-management-modal__footer button { min-width: 86px; height: 40px; border: 1px solid #cddadd; border-radius: 9px; background: #fff; color: #46606a; padding: 0 14px; font-size: 12px; font-weight: 750; }
+@media (max-width: 1150px) {
+  .division-team-management-modal { width: calc(100vw - 40px); max-height: calc(100dvh - 40px); }
+  .division-team-management-modal .team-dashboard .team-grid-row { grid-template-columns: minmax(190px, 1.6fr) minmax(125px, 1fr) minmax(76px, .55fr) minmax(100px, .7fr) minmax(220px, 1.1fr); padding-inline: 18px; }
+  .division-team-management-modal .team-dashboard__heading, .division-team-management-modal__footer { padding-inline: 18px; }
+}
+@media (max-width: 920px) {
+  .division-team-management-modal { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); }
+  .division-team-management-modal .team-dashboard__heading { min-height: 60px; padding: 12px 14px; }
+  .division-team-management-modal .team-dashboard__heading button { width: 100%; height: 38px; }
+  .division-team-management-modal .division-table { overflow: visible; }
+  .division-team-management-modal .team-dashboard .team-grid-row--head { display: none; }
+  .division-team-management-modal .team-dashboard .team-grid-row:not(.team-grid-row--head) { width: 100%; min-width: 0; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 14px; border-bottom: 1px solid #e3ebed; padding: 15px 16px; }
+  .division-team-management-modal .team-dashboard .team-grid-row:not(.team-grid-row--head) > span { display: grid; min-width: 0; gap: 3px; color: #334d55; }
+  .division-team-management-modal .team-dashboard .team-grid-row:not(.team-grid-row--head) > span::before { color: #74858c; content: attr(data-label); font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+  .division-team-management-modal .team-dashboard .team-grid-row:not(.team-grid-row--head) > span:first-child { grid-column: 1 / -1; }
+  .division-team-management-modal .team-dashboard .team-grid-row:not(.team-grid-row--head) > span:first-child strong { font-size: 13px; }
+  .division-team-management-modal .team-dashboard .team-grid-row:not(.team-grid-row--head) > .team-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; padding-top: 2px; }
+  .division-team-management-modal .team-dashboard .team-actions button { flex: 1 1 calc(50% - 4px); height: 34px; }
+  .division-team-management-modal__footer { padding: 12px 14px; }
+  .division-team-management-modal__footer button { width: 100%; }
+}
 .division-modal.member-modal, .division-modal.role-modal { width: min(720px,100%); }
 .division-modal__head { position: sticky; z-index: 2; top: 0; flex: 0 0 auto; border-bottom: 1px solid #e7edf0; background: #fff; padding: 19px 22px; }
 .division-modal__head strong { color: #19313c; font-size: 16px; font-weight: 760; letter-spacing: -.02em; }
@@ -5936,3 +5980,53 @@ button:disabled:hover, button:disabled { cursor: not-allowed; }
 .work-request-list-row { grid-template-columns: minmax(230px, 1.55fr) minmax(135px, .85fr) minmax(80px, .5fr) minmax(120px, .78fr) minmax(112px, .72fr) minmax(132px, .84fr); min-width: 900px; }
 .work-request-list-row > span { min-width: 0; }.work-request-list-row > span:nth-child(2) { display: grid; gap: 4px; }.work-request-list-row > span:nth-child(2) small { overflow: hidden; color: #718289; font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }.work-request-list-row .division-actions { align-items: center; justify-content: flex-start; }.work-request-list-row .division-actions .dash-critical-action { box-sizing: border-box; min-width: 64px; padding: 0 10px; white-space: nowrap; }
 @media (max-width: 760px) { .work-requests-page__filters { align-items: stretch; flex-direction: column; gap: 8px; padding: 12px 14px; }.work-requests-page__filters > div { width: 100%; overflow-x: auto; }.work-requests-page__filters button { flex: 0 0 auto; } }
+
+/* Preserve backend scope values while presenting them in readable title case. */
+.permission-workspace__header select,
+.permission-workspace__header select option { text-transform: capitalize; }
+
+.role-scope-validation { display: grid; gap: 6px; }
+.role-scope-validation strong { font-weight: 800; }
+.role-scope-validation ul { margin: 0; padding-left: 18px; }
+.role-scope-validation { grid-column: 1 / -1; margin: 10px 16px 0; border: 1px solid #e6b8b4; border-radius: 7px; background: #fff8f7; padding: 11px 13px; color: #81352f; font-size: 12px; line-height: 1.45; }
+.role-scope-validation button { width: fit-content; border: 0; background: transparent; color: #9e332b; padding: 0; text-align: left; font: inherit; font-weight: 750; text-decoration: underline; cursor: pointer; }
+.role-scope-validation__remove { margin-top: 2px; border: 1px solid #bd5a53 !important; border-radius: 5px !important; background: #fff !important; padding: 5px 8px !important; text-decoration: none !important; }
+.permission-workspace__permission-grid label.is-incompatible { border-color: #d9867d; background: #fff7f6; color: #8c302a; }
+.permission-workspace__permission-grid label.is-incompatible em { margin-left: auto; border-radius: 999px; background: #fbe2df; padding: 2px 6px; color: #9e332b; font-size: 9px; font-style: normal; font-weight: 800; }
+.permission-workspace__selected section button.is-incompatible { border-color: #d9867d; background: #fff4f2; color: #9e332b; }
+.permission-workspace__selected section button.is-incompatible i { font-size: 9px; font-style: normal; font-weight: 800; }
+
+/* Roster content is a full-width modal section, not one form-grid column. */
+.division-form > .workspace-roster { grid-column: 1 / -1; width: 100%; }
+
+/* The Division Lead selector is the sole form field in its dialog. */
+.division-lead-modal .division-form > label,
+.division-member-assignment-modal .division-form > label,
+.eligible-member-assignment-modal .division-form > label { grid-column: 1 / -1; }
+.eligible-member-assignment-modal__note { grid-column: 1 / -1; margin-top: -10px; color: #697e87; font-size: 11px; }
+
+/* Make the Division Lead action distinct from the secondary row actions. */
+.division-actions--division button:first-child { border-color: #9bc8cd; background: #eef8f8; color: #075b65; }
+.division-actions--division button:first-child:hover:not(:disabled) { border-color: #5f9da5; background: #e1f3f3; color: #054e57; }
+.division-actions--division .division-lead-action { border-color: #9bc8cd; background: #eef8f8; color: #075b65; }
+.division-actions--division .division-lead-action--change { border-color: #d6b06a; background: #fff8e9; color: #7a5617; }
+.division-actions--division .division-lead-action--change:hover:not(:disabled) { border-color: #af8538; background: #fff1cf; color: #61430e; }
+
+/* Manage Team owns its responsive width and table sizing; generic modal/table caps must not apply here. */
+.workspace-create-modal-layer .division-modal-backdrop { z-index: 400; }
+.division-modal.division-team-management-modal { width: min(1400px, calc(100vw - 48px)); max-width: none; max-height: calc(100dvh - 48px); overflow: hidden; }
+.division-modal.division-team-management-modal .team-dashboard { min-width: 0; overflow: auto; }
+.division-modal.division-team-management-modal .division-table { width: 100%; min-width: 0; overflow-x: auto; overflow-y: visible; }
+.division-modal.division-team-management-modal .team-dashboard .team-grid-row { width: 100%; min-width: 0; grid-template-columns: minmax(0, 2fr) minmax(120px, 1fr) minmax(72px, .5fr) minmax(100px, .7fr) minmax(230px, 1.1fr); }
+.division-modal.division-team-management-modal .team-dashboard__empty { display: grid; min-height: 132px; place-items: center; padding: 24px; color: #718289; font-size: 12px; text-align: center; }
+@media (max-width: 920px) {
+  .division-modal.division-team-management-modal { width: calc(100vw - 20px); max-width: none; max-height: calc(100dvh - 20px); }
+  .division-modal.division-team-management-modal .division-table { overflow: visible; }
+  .division-modal.division-team-management-modal .team-dashboard .team-grid-row--head { display: none; }
+  .division-modal.division-team-management-modal .team-dashboard .team-grid-row:not(.team-grid-row--head) { grid-template-columns: minmax(0, 1fr) auto; gap: 10px 14px; padding: 15px 16px; }
+  .division-modal.division-team-management-modal .team-dashboard .team-grid-row:not(.team-grid-row--head) > span { display: grid; min-width: 0; gap: 3px; }
+  .division-modal.division-team-management-modal .team-dashboard .team-grid-row:not(.team-grid-row--head) > span::before { color: #74858c; content: attr(data-label); font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+  .division-modal.division-team-management-modal .team-dashboard .team-grid-row:not(.team-grid-row--head) > span:first-child, .division-modal.division-team-management-modal .team-dashboard .team-grid-row:not(.team-grid-row--head) > .team-actions { grid-column: 1 / -1; }
+  .division-modal.division-team-management-modal .team-dashboard .team-actions { flex-wrap: wrap; }
+  .division-modal.division-team-management-modal .team-dashboard .team-actions button { flex: 1 1 calc(50% - 4px); }
+}

@@ -31,11 +31,11 @@ test('Select All and save payload include the effective dependency set', () => {
   assert.deepEqual(effective, new Set(['perm-bid-update', 'perm-bid-view', 'perm-document-update', 'perm-document-view']));
 });
 
-test('a required dependency remains selected while a dependent remains explicit', () => {
-  const explicit = ['perm-bid-update']; // Removing auto-selected VIEW_BID does not change this explicit set.
-  const effective = [...resolved(explicit)];
-  assert.deepEqual(toggleExplicitPermission(explicit, effective, 'perm-bid-view'), explicit);
-  assert.ok(resolved(explicit).has('perm-bid-view'));
+test('a user can manually unselect an auto-selected dependency', () => {
+  const selected = [...resolved(['perm-bid-update'])];
+  assert.deepEqual(toggleExplicitPermission(selected, selected, 'perm-bid-view'), ['perm-bid-update']);
+  // Selecting another dependent resolves its dependencies at that new selection.
+  assert.ok(resolved(['perm-bid-update', 'perm-bid-comment']).has('perm-bid-view'));
 });
 
 test('a shared dependency remains after one dependent is removed', () => {

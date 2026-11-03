@@ -1,4 +1,5 @@
 import { Check, Circle } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import type { WorkflowRouteNode } from './workflowViewModel';
 
 type Props = { nodes: WorkflowRouteNode[]; divisionNames: Map<string, string>; loading: boolean; error: string | null };
@@ -9,10 +10,11 @@ export function WorkRequestWorkflowTracker({ nodes, divisionNames, loading, erro
     {loading ? <div className="work-request-tracker__empty">Loading lifecycle…</div> : null}
     {error ? <div className="work-request-tracker__empty">{error}</div> : null}
     {!loading && !error && !nodes.length ? <div className="work-request-tracker__empty">No route occurrences are available.</div> : null}
-    {!loading && !error && nodes.length ? <div className="work-request-tracker__steps">{nodes.map((node) => {
+    {!loading && !error && nodes.length ? <div className="work-request-tracker__steps" style={{ '--workflow-count': nodes.length } as CSSProperties}>{nodes.map((node, index) => {
       const status = node.completedAt ? 'completed' : node.isCurrent ? 'current' : 'pending';
       const divisionName = node.divisionName ?? (node.divisionId ? divisionNames.get(node.divisionId) ?? null : null);
-      return <article className={`work-request-step work-request-step--${status}`} key={node.id}><span aria-hidden="true" className="work-request-step__connector" /><span className="work-request-step__icon">{status === 'completed' ? <Check size={15} /> : <Circle fill="currentColor" size={10} />}</span><div><strong>{divisionName ?? (node.divisionId ? 'Division unavailable' : routeKindLabel(node.kind))}</strong><small>{routeKindLabel(node.kind)}</small></div></article>;
+      const position = index === 0 ? ' origin' : index === nodes.length - 1 ? ' end' : '';
+      return <article className={`work-request-step work-request-step--${status}${position}`} key={node.id}><span aria-hidden="true" className="work-request-step__connector" /><span className="work-request-step__icon">{status === 'completed' ? <Check size={15} /> : <Circle fill="currentColor" size={10} />}</span><div><strong>{divisionName ?? (node.divisionId ? 'Division unavailable' : routeKindLabel(node.kind))}</strong><small>{index === 0 ? `Start · ${routeKindLabel(node.kind)}` : index === nodes.length - 1 ? `Final · ${routeKindLabel(node.kind)}` : routeKindLabel(node.kind)}</small></div></article>;
     })}</div> : null}
   </section>;
 }

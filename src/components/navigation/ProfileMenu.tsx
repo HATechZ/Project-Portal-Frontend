@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { activateActorProfile, getActorProfiles, getCurrentUser, logout } from '@/services/authService';
-import { clearStoredUser, persistUser, readStoredUser } from '@/services/authSession';
+import { clearAuthenticatedBrowserState, persistUser, readStoredUser } from '@/services/authSession';
 import { resetAuthScopedQueries } from '@/services/authQueryCache';
 
 export function ProfileMenu() {
@@ -13,20 +13,22 @@ export function ProfileMenu() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const user = readStoredUser();
-  const userName = user?.fullName ?? 'Nayeem Rahman';
-  const email = user?.email ?? 'nayeem@techmarine.com';
+  const userName = user?.fullName ?? '';
+  const email = user?.email ?? '';
   const initials = getInitials(userName);
   const profilesQuery = useQuery({ queryKey: ['actor-profiles'], queryFn: getActorProfiles, enabled: open });
 
   const logoutMutation = useMutation({
-    mutationFn: () => logout(localStorage.getItem('accessToken')),
-    onSettled: () => {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      clearStoredUser();
-      toast.success('Logged out successfully.');
-      navigate('/login');
+    mutationFn: (accessToken: string | null) => logout(accessToken),
+    onMutate: () => {
+      // Remove the actor before the network request settles so DashboardLayout
+      // immediately unmounts instead of briefly showing a stale shell.
+      clearAuthenticatedBrowserState();
+      void resetAuthScopedQueries(queryClient);
+      navigate('/login', { replace: true });
     },
+    onSuccess: () => toast.success('Logged out successfully.'),
+    onError: () => toast.error('Local session was cleared. The server logout request could not be completed.'),
   });
   const activateProfileMutation = useMutation({
     mutationFn: async (profileId: string) => {
@@ -74,7 +76,7 @@ export function ProfileMenu() {
             Profile
           </button>
           {profilesQuery.data && profilesQuery.data.length > 1 ? <><div className="profile-separator" />{profilesQuery.data.map((profile) => <button className="profile-item" disabled={profile.isActive || activateProfileMutation.isPending} key={profile.id} onClick={() => activateProfileMutation.mutate(profile.id)} role="menuitem" type="button"><User size={14} />{profile.isActive ? `${profile.label} (active)` : profile.label}</button>)}</> : null}
-          <button className="profile-item profile-item--danger" type="button" role="menuitem" onClick={() => logoutMutation.mutate()} disabled={logoutMutation.isPending}>
+          <button className="profile-item profile-item--danger" type="button" role="menuitem" onClick={() => logoutMutation.mutate(localStorage.getItem('accessToken'))} disabled={logoutMutation.isPending}>
             <LogOut size={14} />
             {logoutMutation.isPending ? 'Logging out...' : 'Logout'}
           </button>

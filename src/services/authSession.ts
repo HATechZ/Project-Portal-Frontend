@@ -46,6 +46,21 @@ export function clearStoredUser() {
   if (updateCachedUser(null)) notifyAuthSessionChanged();
 }
 
+/** Remove every browser-side value that can identify or authorize an actor. */
+export function clearAuthenticatedBrowserState() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  // Older builds used several auth-prefixed keys. Do not retain one across a
+  // logout/login boundary, but leave unrelated application preferences intact.
+  for (const storage of [localStorage, sessionStorage]) {
+    for (let index = storage.length - 1; index >= 0; index -= 1) {
+      const key = storage.key(index);
+      if (key && /^(auth|user|profile|role|permission|token)/i.test(key)) storage.removeItem(key);
+    }
+  }
+  clearStoredUser();
+}
+
 export function subscribeToAuthSession(listener: () => void) {
   const onStorage = (event: StorageEvent) => {
     if (event.key !== 'user' && event.key !== null) return;

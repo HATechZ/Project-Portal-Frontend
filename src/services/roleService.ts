@@ -61,6 +61,10 @@ export function getAccessRole(roleId: string) {
   return apiClient<ApiResponse<AccessRole>>(`/role/${roleId}`).then(unwrap);
 }
 
+export function getRoleScopes() {
+  return apiClient<ApiResponse<unknown>>('/role/scope').then(unwrap).then(normalizeRoleScopes);
+}
+
 export function getPermissions(scope?: string, module?: string) {
   const params = new URLSearchParams({ customRole: 'true' });
   if (scope?.trim()) params.set('scope', scope.trim().toLowerCase());
@@ -78,6 +82,16 @@ export function getPermissions(scope?: string, module?: string) {
     }
     return normalized;
   });
+}
+
+function normalizeRoleScopes(value: unknown): string[] {
+  const scopes = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? (value as { scopes?: unknown; items?: unknown }).scopes ?? (value as { items?: unknown }).items
+      : [];
+  if (!Array.isArray(scopes)) return [];
+  return [...new Set(scopes.filter((scope): scope is string => typeof scope === 'string').map((scope) => scope.trim()).filter(Boolean))];
 }
 
 export function getPermission(permissionId: string) {

@@ -22,7 +22,7 @@ const teamsQueryKey = ['teams'] as const;
 const companyMembersQueryKey = ['members'] as const;
 type ModalMode = 'create' | 'edit' | 'lead' | 'members' | null;
 
-export function TeamPage({ embedded = false, createRequest = 0, modalOnly = false, filterText = '' }: { embedded?: boolean; createRequest?: number; modalOnly?: boolean; filterText?: string }) {
+export function TeamPage({ embedded = false, createRequest = 0, modalOnly = false, filterText = '', divisionId, onClose, onCreateTeam, preselectedDivisionId, modalPresentation = false }: { embedded?: boolean; createRequest?: number; modalOnly?: boolean; filterText?: string; divisionId?: string; onClose?: () => void; onCreateTeam?: () => void; preselectedDivisionId?: string; modalPresentation?: boolean }) {
   usePageTitle(embedded ? 'Dashboard' : 'Teams');
   const queryClient = useQueryClient();
   const [modal, setModal] = useState<ModalMode>(null);
@@ -37,8 +37,12 @@ export function TeamPage({ embedded = false, createRequest = 0, modalOnly = fals
   const teamMembersQuery = useQuery({ queryKey: ['teams', selectedTeam?.id, 'members'], queryFn: () => getTeamMembers(selectedTeam!.id), enabled: modal === 'members' && Boolean(selectedTeam) });
 
   useEffect(() => {
-    if (createRequest > 0) openCreate();
-  }, [createRequest]);
+    if (createRequest > 0) {
+      setSelectedTeam(null);
+      setTeamForm({ divisionId: preselectedDivisionId ?? divisionId ?? '', name: '', leadMemberId: null });
+      setModal('create');
+    }
+  }, [createRequest, divisionId, preselectedDivisionId]);
 
   const closeModal = () => {
     setModal(null);
@@ -83,7 +87,7 @@ export function TeamPage({ embedded = false, createRequest = 0, modalOnly = fals
     onError: () => toast.error('Unable to remove that member.'),
   });
 
-  function openCreate() { setSelectedTeam(null); setTeamForm({ divisionId: '', name: '', leadMemberId: null }); setModal('create'); }
+  function openCreate(selectedDivisionId = divisionId ?? '') { setSelectedTeam(null); setTeamForm({ divisionId: selectedDivisionId, name: '', leadMemberId: null }); setModal('create'); }
   function openEdit(team: Team) { setSelectedTeam(team); setTeamForm({ divisionId: '', name: team.name, leadMemberId: null }); setModal('edit'); }
   function openLead(team: Team) { setSelectedTeam(team); setLeadId(team.leadMemberId ?? team.leadMember?.id ?? team.leadId ?? team.lead?.id ?? ''); setModal('lead'); }
   function openMembers(team: Team) { setSelectedTeam(team); setMemberId(''); setModal('members'); }
@@ -103,31 +107,30 @@ export function TeamPage({ embedded = false, createRequest = 0, modalOnly = fals
     if (window.confirm(`Remove ${member.name} from this team?`)) removeMemberMutation.mutate(member.id);
   }
 
-  const teams = (teamsQuery.data?.items ?? []).filter((team) => `${team.name} ${team.description ?? ''} ${team.leadMember?.name ?? team.lead?.name ?? ''}`.toLowerCase().includes(filterText.trim().toLowerCase()));
+  const teams = (teamsQuery.data?.items ?? []).filter((team) => (!divisionId || team.divisionId === divisionId) && `${team.name} ${team.description ?? ''} ${team.leadMember?.name ?? team.lead?.name ?? ''}`.toLowerCase().includes(filterText.trim().toLowerCase()));
   const companyMembers = companyMembersQuery.data?.items ?? [];
   const teamMembers = teamMembersQuery.data ?? [];
   const availableMembers = companyMembers.filter((member) => !teamMembers.some((assigned) => assigned.id === member.id));
 
-  if (modalOnly) return (modal === 'create' || modal === 'edit') ? <div className="division-modal-backdrop" role="presentation"><section aria-modal="true" className="division-modal" role="dialog"><div className="division-modal__head"><div><strong>{modal === 'edit' ? 'Update Team' : 'Create Team'}</strong></div><button aria-label="Close team dialog" onClick={closeModal} type="button">X</button></div><form className="division-form" onSubmit={handleSaveTeam}>{modal === 'create' ? <label><span>Division</span><select onChange={(event) => setTeamForm((value) => ({ ...value, divisionId: event.target.value }))} required value={teamForm.divisionId}><option value="">Select a division</option>{divisionsQuery.data?.items.filter((division) => division.isActive).map((division) => <option key={division.id} value={division.id}>{division.name} ({division.abbr})</option>)}</select></label> : null}<label><span>Team name</span><input autoFocus maxLength={100} onChange={(event) => setTeamForm((value) => ({ ...value, name: event.target.value }))} required value={teamForm.name} /></label><div className="division-form__actions"><button onClick={closeModal} type="button">Cancel</button><button disabled={saveTeamMutation.isPending || (modal === 'create' && divisionsQuery.isLoading)} type="submit">{saveTeamMutation.isPending ? 'Saving...' : modal === 'edit' ? 'Update Team' : 'Create Team'}</button></div></form></section></div> : null;
+  if (modalOnly) return (modal === 'create' || modal === 'edit') ? <div className="division-modal-backdrop" role="presentation"><section aria-modal="true" className="division-modal" role="dialog"><div className="division-modal__head"><div><strong>{modal === 'edit' ? 'Update Team' : 'Create Team'}</strong></div><button aria-label="Close team dialog" onClick={closeModal} type="button">X</button></div><form className="division-form" onSubmit={handleSaveTeam}>{modal === 'create' && !divisionId ? <label><span>Division</span><select onChange={(event) => setTeamForm((value) => ({ ...value, divisionId: event.target.value }))} required value={teamForm.divisionId}><option value="">Select a division</option>{divisionsQuery.data?.items.filter((division) => division.isActive).map((division) => <option key={division.id} value={division.id}>{division.name} ({division.abbr})</option>)}</select></label> : null}<label><span>Team name</span><input autoFocus maxLength={100} onChange={(event) => setTeamForm((value) => ({ ...value, name: event.target.value }))} required value={teamForm.name} /></label><div className="division-form__actions"><button onClick={closeModal} type="button">Cancel</button><button disabled={saveTeamMutation.isPending || (modal === 'create' && !divisionId && divisionsQuery.isLoading)} type="submit">{saveTeamMutation.isPending ? 'Saving...' : modal === 'edit' ? 'Update Team' : 'Create Team'}</button></div></form></section></div> : null;
 
   return (
     <section className={embedded ? 'team-dashboard dash-panel division-panel' : 'team-dashboard'}>
       <header className="dash-section-title team-dashboard__heading">
-        <div><strong>Teams</strong><span>{teamsQuery.isLoading ? 'Loading teams' : `${teams.length} team records`}</span></div>
-        <button onClick={openCreate} type="button">Create Team</button>
+        {modalPresentation ? <button onClick={onCreateTeam ?? (() => openCreate())} type="button">Create Team</button> : <><div><strong>{divisionId ? 'Division Teams' : 'Teams'}</strong><span>{teamsQuery.isLoading ? 'Loading teams' : `${teams.length} team records`}</span></div><div><button onClick={onCreateTeam ?? (() => openCreate())} type="button">Create Team</button>{onClose ? <button onClick={onClose} type="button">Close</button> : null}</div></>}
       </header>
-      <div className="division-table">
+      {teamsQuery.isLoading ? <div className="team-dashboard__empty">Loading teams...</div> : null}
+      {teamsQuery.isError ? <div className="team-dashboard__empty">Unable to load teams.</div> : null}
+      {!teamsQuery.isLoading && !teamsQuery.isError && !teams.length ? <div className="team-dashboard__empty">No teams available. Create the first team to get started.</div> : null}
+      {!teamsQuery.isLoading && !teamsQuery.isError && teams.length ? <div className="division-table">
         <div className="team-grid-row team-grid-row--head"><span>Team</span><span>Lead</span><span>Members</span><span>Updated</span><span>Actions</span></div>
-        {teamsQuery.isLoading ? <div className="division-empty">Loading teams...</div> : null}
-        {teamsQuery.isError ? <div className="division-empty">Unable to load teams.</div> : null}
-        {!teamsQuery.isLoading && !teamsQuery.isError && !teams.length ? <div className="division-empty">No teams available. Create the first team to get started.</div> : null}
         {teams.map((team) => (
           <div className="team-grid-row" key={team.id}>
-            <span><strong>{team.name}</strong>{team.description ? <small>{team.description}</small> : null}</span>
-            <span>{team.leadMember?.name ?? team.lead?.name ?? 'Not assigned'}</span>
-            <span><TeamMemberCount team={team} /></span>
-            <span>{formatDate(team.updatedAt)}</span>
-            <span className="division-actions team-actions">
+            <span data-label="Team"><strong>{team.name}</strong>{team.description ? <small>{team.description}</small> : null}</span>
+            <span data-label="Lead">{team.leadMember?.name ?? team.lead?.name ?? 'Not assigned'}</span>
+            <span data-label="Members"><TeamMemberCount team={team} /></span>
+            <span data-label="Updated">{formatDate(team.updatedAt)}</span>
+            <span className="division-actions team-actions" data-label="Actions">
               <button onClick={() => openEdit(team)} type="button">Edit</button>
               <button onClick={() => openLead(team)} type="button">Set lead</button>
               <button onClick={() => openMembers(team)} type="button">Members</button>
@@ -135,14 +138,14 @@ export function TeamPage({ embedded = false, createRequest = 0, modalOnly = fals
             </span>
           </div>
         ))}
-      </div>
+      </div> : null}
 
       {(modal === 'create' || modal === 'edit') && (
         <div className="division-modal-backdrop" role="presentation">
           <section aria-modal="true" className="division-modal" role="dialog">
             <div className="division-modal__head"><div><strong>{modal === 'edit' ? 'Update Team' : 'Create Team'}</strong></div><button aria-label="Close team dialog" onClick={closeModal} type="button">X</button></div>
             <form className="division-form" onSubmit={handleSaveTeam}>
-              {modal === 'create' ? <label><span>Division</span><select onChange={(event) => setTeamForm((value) => ({ ...value, divisionId: event.target.value }))} required value={teamForm.divisionId}><option value="">Select a division</option>{divisionsQuery.data?.items.filter((division) => division.isActive).map((division) => <option key={division.id} value={division.id}>{division.name} ({division.abbr})</option>)}</select></label> : null}
+              {modal === 'create' && !divisionId ? <label><span>Division</span><select onChange={(event) => setTeamForm((value) => ({ ...value, divisionId: event.target.value }))} required value={teamForm.divisionId}><option value="">Select a division</option>{divisionsQuery.data?.items.filter((division) => division.isActive).map((division) => <option key={division.id} value={division.id}>{division.name} ({division.abbr})</option>)}</select></label> : null}
               <label><span>Team name</span><input autoFocus maxLength={100} onChange={(event) => setTeamForm((value) => ({ ...value, name: event.target.value }))} placeholder="e.g. Software Development" required value={teamForm.name} /></label>
               <div className="division-form__actions"><button onClick={closeModal} type="button">Cancel</button><button disabled={saveTeamMutation.isPending || (modal === 'create' && divisionsQuery.isLoading)} type="submit">{saveTeamMutation.isPending ? 'Saving...' : modal === 'edit' ? 'Update Team' : 'Create Team'}</button></div>
             </form>

@@ -19,6 +19,9 @@
 .work-request-header__actions button:first-child { border-color: #0b91a8; background: #1595af; color: #fff; }
 .work-request-header__actions button:disabled { cursor: not-allowed; opacity: .88; }
 .work-request-action-menu { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.work-request-action-dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); }
+.work-request-action-dialog .division-form { max-height: calc(100dvh - 120px); overflow: auto; }
+.work-request-action-dialog fieldset { min-width: 0; max-height: min(320px, 40dvh); overflow: auto; }
 .work-request-actions-status { display: flex; min-height: 30px; align-items: center; justify-content: flex-end; gap: 8px; color: #718196; font-size: 11px; font-weight: 700; }
 .work-request-actions-status--loading span { display: block; width: 96px; height: 30px; border-radius: 8px; background: linear-gradient(90deg, #edf2f6 25%, #f7f9fb 45%, #edf2f6 65%); background-size: 280% 100%; animation: work-request-shimmer 1.2s infinite; }
 .work-request-actions-status--loading span + span { width: 64px; }
@@ -57,7 +60,8 @@
 .work-request-tracker .work-request-panel__header { min-height: 52px; padding: 15px 19px 2px; }
 .work-request-tracker .work-request-panel__header h2 { color: #8a9bb2; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 .work-request-tracker .work-request-panel__header p { display: none; }
-.work-request-tracker__steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 13px 24px 22px; }
+.work-request-tracker__steps { display: grid; grid-template-columns: repeat(var(--workflow-count), minmax(132px, 1fr)); min-width: max-content; padding: 13px 24px 22px; }
+.work-request-tracker { overflow-x: auto; }
 .work-request-step { position: relative; display: grid; grid-template-columns: 1fr; justify-items: center; gap: 0; min-width: 0; text-align: center; }
 .work-request-step__connector { position: absolute; z-index: 0; top: 14px; left: calc(50% + 14px); width: calc(100% - 28px); height: 2px; background: #e4eaf0; }
 .work-request-step:last-child .work-request-step__connector { display: none; }
@@ -70,6 +74,8 @@
 .work-request-step--current .work-request-step__icon { border-color: #0b6474; background: #e9f8f7; color: #0b6474; box-shadow: 0 0 0 4px rgba(12, 148, 126, .12); }
 .work-request-step--current strong { color: #075966; }
 .work-request-step--current small { color: #08766d; font-weight: 700; }
+.work-request-step.origin .work-request-step__icon { border-style: double; }
+.work-request-step.end .work-request-step__icon { border-radius: 8px; }
 
 .work-request-page__grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr); align-items: start; gap: 18px; }
 .work-request-page__main, .work-request-page__aside { display: grid; gap: 18px; }
@@ -149,9 +155,11 @@
   .work-request-routing-summary__items { grid-template-columns: 1fr; gap: 4px; padding: 4px 18px 14px; }
   .work-request-routing-summary__items article, .work-request-routing-summary__items article:first-child, .work-request-routing-summary__items article:last-child { border-left: 0; border-top: 1px solid #edf1f5; padding: 10px 0; }
   .work-request-routing-summary__items article:first-child { border-top: 0; }
-  .work-request-tracker__steps { grid-template-columns: 1fr; gap: 14px; padding: 14px 18px 18px; }
+  .work-request-tracker { overflow: hidden; }
+  .work-request-tracker__steps { grid-template-columns: 1fr; min-width: 0; gap: 14px; padding: 14px 18px 18px; }
   .work-request-step { grid-template-columns: 30px minmax(0, 1fr); justify-items: start; gap: 8px; text-align: left; }
   .work-request-step__connector { top: 29px; left: 13px; width: 2px; height: calc(100% + 14px); }
+  .work-request-action-dialog { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); }
   .work-request-page__aside { grid-template-columns: 1fr; }
   .work-request-preview-card { min-height: 340px; }
   .work-request-preview-card__toolbar { align-items: flex-start; flex-direction: column; justify-content: center; padding: 10px 14px; }

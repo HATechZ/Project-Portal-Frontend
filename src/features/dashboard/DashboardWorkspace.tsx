@@ -32,7 +32,7 @@ import { getGeneralDocumentCodes } from '@/services/generalDocumentCodeService';
 import { AttachmentUpload } from '@/components/ui/AttachmentUpload';
 import { usePermissions } from '@/hooks/usePermissions';
 import { createPendingAttachment, type PendingAttachment } from '@/components/ui/attachmentDraft';
-import { ArrowRight, BadgeCheck, Building2, ClipboardList, Clock3, FileCheck2, FilePlus2, FolderKanban, FolderOpen, Upload, Users, UsersRound } from 'lucide-react';
+import { ArrowRight, BadgeCheck, Building2, ClipboardList, Clock3, FileCheck2, FilePlus2, FolderKanban, FolderOpen, Upload, Users, UsersRound, type LucideIcon } from 'lucide-react';
 
 const divisionsQueryKey = ['divisions'];
 const membersQueryKey = ['members'];
@@ -75,12 +75,17 @@ function MetricsStrip({ bids, projects, workRequests, loading, canViewBid, canVi
   );
 }
 
+function DashboardEmptyState({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description: string }) {
+  return <div className="dash-empty-state"><span className="dash-empty-state__icon"><Icon size={18} /></span><div><strong>{title}</strong><p>{description}</p></div></div>;
+}
+
 function QuickAccess({ bids, projects, loading, clientNames, viewAllPath }: { bids: Bid[]; projects: Project[]; loading: boolean; clientNames: Map<string, string>; viewAllPath: string }) {
   const navigate = useNavigate();
   const workspaces = [
     ...bids.map((bid) => ({ id: bid.id, name: bid.name, type: 'Bid' as const, client: clientNameFromBid(bid, clientNames), status: bid.status, updatedAt: bid.updatedAt })),
     ...projects.map((project) => ({ id: project.id, name: project.name, type: 'Project' as const, client: clientNames.get(project.clientId) ?? null, status: project.status, updatedAt: project.updatedAt })),
   ].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()).slice(0, 6);
+  if (!loading && !workspaces.length) return <section className="dash-panel dash-workspace-panel"><div className="dash-panel-head"><div><FolderOpen size={17} /><strong>Quick Access Workspace Folders</strong></div><Link className="dash-workspace-view-all" to={viewAllPath}>View all</Link></div><div className="dash-workspace-grid dash-workspace-grid--empty"><DashboardEmptyState description="Workspace folders will appear here once projects or bids are created." icon={FolderOpen} title="No workspace folders available yet." /></div></section>;
   return <section className="dash-panel dash-workspace-panel"><div className="dash-panel-head"><div><FolderOpen size={17} /><strong>Quick Access Workspace Folders</strong></div><Link className="dash-workspace-view-all" to={viewAllPath}>View all</Link></div><div className="dash-workspace-grid">{loading ? <p>Loading workspaces...</p> : workspaces.length ? workspaces.map((workspace) => { const path = `/${workspace.type === 'Bid' ? 'bids' : 'projects'}/${workspace.id}`; return <article aria-label={`Open ${workspace.name}`} key={`${workspace.type}-${workspace.id}`} onClick={() => navigate(path)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(path); } }} role="link" tabIndex={0}><div className={`dash-workspace-icon dash-workspace-icon--${workspace.type.toLowerCase()}`}><FolderOpen size={18} /></div><div className="dash-workspace-copy"><div className="dash-workspace-title"><strong title={workspace.name}>{workspace.name}</strong><em>{workspace.type}</em></div><small><span title={workspace.client ?? undefined}>Client: <b>{workspace.client ?? '—'}</b></span><span title={workspace.status || undefined}>STATUS: <b>{workspace.status || '—'}</b></span></small></div><ArrowRight size={17} /></article>; }) : <p>No project or bid workspaces are available yet.</p>}</div></section>;
 }
 
@@ -114,11 +119,13 @@ function UploadDocumentModal({ onClose }: { onClose: () => void }) {
 
 function CriticalWork({ workRequests, loading }: { workRequests: WorkRequest[]; loading: boolean }) {
   const requests = [...workRequests].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()).slice(0, 5);
+  if (!loading && !requests.length) return <section className="dash-panel dash-critical-panel"><div className="dash-panel-head"><div><strong>Work Requests</strong></div></div><div className="dash-critical-table"><DashboardEmptyState description="Work requests will appear here once they are created or assigned to you." icon={ClipboardList} title="No work requests available yet." /></div></section>;
   return <section className="dash-panel dash-critical-panel"><div className="dash-panel-head"><div><strong>Work Requests</strong></div></div><div className="dash-critical-table"><div className="dash-critical-row dash-critical-row--head"><span>Title</span><span>Type</span><span>Ship. No</span><span>Revision</span><span>Last Update</span><span>Status</span><span>Actions</span></div>{loading ? <p>Loading current work requests...</p> : requests.map((request) => <div className="dash-critical-row" key={request.id}><div><strong>{request.title}</strong><small>WR-{request.id.slice(0, 8).toUpperCase()}</small></div><span>{request.projectId ? 'Project' : request.bidId ? 'Bid' : 'General'}</span><span>{requestValue(request, 'shipmentNumber', 'shipmentNo') ?? '—'}</span><span>{requestValue(request, 'revision', 'revisionNumber') ?? '—'}</span><small>{formatDate(request.updatedAt)}</small><span><em>{request.currentState || '—'}</em></span><Link className="dash-critical-action" to={`/work-requests/${request.id}`}>View</Link></div>)}{!loading && !requests.length ? <p>No work requests are available yet.</p> : null}</div></section>;
 }
 
 function ActivityTrail({ bids, projects, workRequests }: { bids: Bid[]; projects: Project[]; workRequests: WorkRequest[] }) {
   const activity = [...workRequests.map((item) => ({ id: `wr-${item.id}`, label: item.title, type: 'Work request updated', date: item.updatedAt })), ...bids.map((item) => ({ id: `bid-${item.id}`, label: item.name, type: 'Bid updated', date: item.updatedAt })), ...projects.map((item) => ({ id: `project-${item.id}`, label: item.name, type: 'Project updated', date: item.updatedAt }))].sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()).slice(0, 4);
+  if (!activity.length) return <section className="dash-panel dash-activity-panel"><div className="dash-panel-head"><div><Clock3 size={17} /><strong>System activity</strong></div><span>Live log</span></div><div className="dash-activity-list"><DashboardEmptyState description="Updates from projects, bids, and work requests will appear here." icon={Clock3} title="No system activity available yet." /></div></section>;
   return <section className="dash-panel dash-activity-panel"><div className="dash-panel-head"><div><Clock3 size={17} /><strong>System activity</strong></div><span>Live log</span></div><div className="dash-activity-list">{activity.length ? activity.map((item) => <article key={item.id}><span><Clock3 size={15} /></span><div><strong>{item.type}</strong><p>{item.label}</p><small>{formatDate(item.date)}</small></div></article>) : <p>Recent project activity will appear here.</p>}</div></section>;
 }
 
@@ -415,7 +422,7 @@ export function DashboardWorkspace({ modalOnly = false, createType, createReques
       {canViewBid || can('CREATE_BID') ? <BidsPanel createRequest={bidCreateRequest} modalOnly /> : null}
       {canViewProject || can('CREATE_PROJECT') ? <ProjectsPanel createRequest={projectCreateRequest} modalOnly /> : null}
       {canViewWorkRequest || can('CREATE_WORK_REQUEST') ? <WorkRequestsPage createRequest={workRequestCreateRequest} embedded modalOnly /> : null}
-      {can('VIEW_TEAMS') || can('CREATE_TEAM') ? <TeamPage createRequest={teamCreateRequest} embedded modalOnly /> : null}
+      {can('VIEW_TEAMS') || can('CREATE_TEAM') ? <TeamPage createRequest={teamCreateRequest} embedded modalOnly preselectedDivisionId={preselectedDivisionId} /> : null}
       {isUploadModalOpen ? <UploadDocumentModal onClose={() => setIsUploadModalOpen(false)} /> : null}
       {isDivisionModalOpen ? (
         <DivisionModal

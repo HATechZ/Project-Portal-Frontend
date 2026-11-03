@@ -8,7 +8,7 @@ import { countries, getCountryShortName } from '@/constants/countries';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { ApiClientError } from '@/services/apiClient';
 import { getCurrentUser, login } from '@/services/authService';
-import { persistUser } from '@/services/authSession';
+import { clearAuthenticatedBrowserState, persistUser } from '@/services/authSession';
 import { resetAuthScopedQueries } from '@/services/authQueryCache';
 import { getCompanyTypes, signupCompany } from '@/services/companyService';
 
@@ -364,6 +364,12 @@ function LoginScreen({ showReference = false }: { showReference?: boolean }) {
   });
 
   const loginMutation = useMutation({
+    onMutate: async () => {
+      // A new sign-in must never briefly inherit the previous actor's cached
+      // profile, permission set, modules, or workflow actions.
+      clearAuthenticatedBrowserState();
+      await resetAuthScopedQueries(queryClient);
+    },
     mutationFn: async (payload: { email: string; password: string }) => {
       const response = await login(payload);
       localStorage.setItem('accessToken', response.data.tokens.accessToken);
@@ -371,8 +377,7 @@ function LoginScreen({ showReference = false }: { showReference?: boolean }) {
       try {
         return { response, activeUser: await getCurrentUser() };
       } catch (error) {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
+        clearAuthenticatedBrowserState();
         throw error;
       }
     },
