@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
-import { ApiClientError } from '@/services/apiClient';
+import { ApiClientError, isApiNetworkError } from '@/services/apiClient';
 import { TeamPage } from '@/pages/TeamPage';
 import { BidsPanel } from '@/features/dashboard/BidsPanel';
 import { ProjectsPanel } from '@/features/dashboard/ProjectsPanel';
@@ -27,16 +27,22 @@ import { getDesignations, type Designation } from '@/services/designationService
 import { getBids, type Bid } from '@/services/bidService';
 import { getProjects, type Project } from '@/services/projectService';
 import { getClients } from '@/services/clientService';
+import { getTeams } from '@/services/teamService';
 import { getWorkRequests, type WorkRequest } from '@/services/workRequestService';
 import { getGeneralDocumentCodes } from '@/services/generalDocumentCodeService';
 import { AttachmentUpload } from '@/components/ui/AttachmentUpload';
 import { usePermissions } from '@/hooks/usePermissions';
 import { createPendingAttachment, type PendingAttachment } from '@/components/ui/attachmentDraft';
-import { ArrowRight, BadgeCheck, Building2, ClipboardList, Clock3, FileCheck2, FilePlus2, FolderKanban, FolderOpen, Upload, Users, UsersRound, type LucideIcon } from 'lucide-react';
+import { dashboardMetricValue, hasDashboardOutage, retryFailedDashboardQueries } from './dashboardLoadState';
+import { AlertCircle, ArrowRight, BadgeCheck, Building2, ClipboardList, Clock3, FileCheck2, FilePlus2, FolderKanban, FolderOpen, Upload, Users, UsersRound, type LucideIcon } from 'lucide-react';
 
 const divisionsQueryKey = ['divisions'];
 const membersQueryKey = ['members'];
 const designationsQueryKey = ['designations'];
+
+function isUnavailableError(error: unknown) {
+  return isApiNetworkError(error) || (error instanceof ApiClientError && [502, 503, 504].includes(error.status));
+}
 
 const emptyDivisionForm: DivisionPayload = {
   name: '',
@@ -50,15 +56,21 @@ const emptyMemberForm: MemberForm = {
   name: '', email: '', password: '', roleId: '', divisionId: '', designationId: '', phone: '', isActive: true,
 };
 
-function MetricsStrip({ bids, projects, workRequests, loading, canViewBid, canViewProject, canViewWorkRequest, canViewDocument }: {
-  bids: Bid[]; projects: Project[]; workRequests: WorkRequest[]; loading: boolean; canViewBid: boolean; canViewProject: boolean; canViewWorkRequest: boolean; canViewDocument: boolean;
+type MetricState = { loading: boolean; failed: boolean; retry: () => void; detail?: string; network?: boolean };
+
+function SectionError({ message, onRetry, detail }: { message: string; onRetry: () => void; detail?: string }) {
+  return <div className="dash-load-error" role="status"><span>{message}{detail ? ` ${detail}` : ''}</span><button onClick={onRetry} type="button">Retry</button></div>;
+}
+
+function MetricsStrip({ bids, projects, workRequests, bidState, projectState, workRequestState, globalError, canViewBid, canViewProject, canViewWorkRequest, canViewDocument }: {
+  bids: Bid[]; projects: Project[]; workRequests: WorkRequest[]; bidState: MetricState; projectState: MetricState; workRequestState: MetricState; globalError: boolean; canViewBid: boolean; canViewProject: boolean; canViewWorkRequest: boolean; canViewDocument: boolean;
 }) {
   const linkedDocuments = projects.reduce((total, project) => total + project.fileCount, 0) + bids.reduce((total, bid) => total + bid.fileCount, 0);
   const metrics = [
-    ...(canViewProject ? [{ label: 'Active engineering projects', value: projects.length, caption: 'Current project workspaces', icon: FolderKanban, tone: 'orange' }] : []),
-    ...(canViewBid ? [{ label: 'Active bids / proposals', value: bids.length, caption: 'Open bid workspaces', icon: FilePlus2, tone: 'green' }] : []),
-    ...(canViewWorkRequest ? [{ label: 'Pending reviews', value: workRequests.length, caption: 'Requests in the workflow', icon: Clock3, tone: 'blue' }] : []),
-    ...(canViewDocument && (canViewBid || canViewProject) ? [{ label: 'Linked documents', value: linkedDocuments, caption: 'Documents in accessible workspaces', icon: FileCheck2, tone: 'rose' }] : []),
+    ...(canViewProject ? [{ label: 'Active engineering projects', value: projects.length, caption: 'Current project workspaces', icon: FolderKanban, tone: 'orange', state: projectState, error: 'Unable to load projects.' }] : []),
+    ...(canViewBid ? [{ label: 'Active bids / proposals', value: bids.length, caption: 'Open bid workspaces', icon: FilePlus2, tone: 'green', state: bidState, error: 'Unable to load bids.' }] : []),
+    ...(canViewWorkRequest ? [{ label: 'Pending reviews', value: workRequests.length, caption: 'Requests in the workflow', icon: Clock3, tone: 'blue', state: workRequestState, error: 'Unable to load work requests.' }] : []),
+    ...(canViewDocument && (canViewBid || canViewProject) ? [{ label: 'Linked documents', value: linkedDocuments, caption: 'Documents in accessible workspaces', icon: FileCheck2, tone: 'rose', state: { loading: (canViewBid && bidState.loading) || (canViewProject && projectState.loading), failed: (canViewBid && bidState.failed) || (canViewProject && projectState.failed), retry: () => { if (bidState.failed) bidState.retry(); if (projectState.failed) projectState.retry(); } }, error: 'Unable to load linked documents.' }] : []),
   ];
 
   return (
@@ -67,8 +79,8 @@ function MetricsStrip({ bids, projects, workRequests, loading, canViewBid, canVi
         <article className="dash-metric dash-metric--live" key={metric.label}>
           <div className={`dash-metric__icon dash-metric__icon--${metric.tone}`}><metric.icon size={18} /></div>
           <span>{metric.label}</span>
-          <strong>{loading ? '-' : metric.value}</strong>
-          <small>{metric.caption}</small>
+          <strong>{dashboardMetricValue(metric.value, metric.state.loading, metric.state.failed) ?? '—'}</strong>
+          {metric.state.failed && !(globalError && 'network' in metric.state && metric.state.network) && (metric.label === 'Active engineering projects' || metric.label === 'Active bids / proposals') ? <SectionError detail={'detail' in metric.state ? metric.state.detail : undefined} message={metric.error} onRetry={metric.state.retry} /> : <small>{metric.caption}</small>}
         </article>
       ))}
     </section>
@@ -79,14 +91,15 @@ function DashboardEmptyState({ icon: Icon, title, description }: { icon: LucideI
   return <div className="dash-empty-state"><span className="dash-empty-state__icon"><Icon size={18} /></span><div><strong>{title}</strong><p>{description}</p></div></div>;
 }
 
-function QuickAccess({ bids, projects, loading, clientNames, viewAllPath }: { bids: Bid[]; projects: Project[]; loading: boolean; clientNames: Map<string, string>; viewAllPath: string }) {
+function QuickAccess({ bids, projects, loading, unavailable, globalError, onRetry, errorMessage, clientNames, viewAllPath }: { bids: Bid[]; projects: Project[]; loading: boolean; unavailable: boolean; globalError: boolean; onRetry: () => void; errorMessage: string; clientNames: Map<string, string>; viewAllPath: string }) {
   const navigate = useNavigate();
   const workspaces = [
     ...bids.map((bid) => ({ id: bid.id, name: bid.name, type: 'Bid' as const, client: clientNameFromBid(bid, clientNames), status: bid.status, updatedAt: bid.updatedAt })),
     ...projects.map((project) => ({ id: project.id, name: project.name, type: 'Project' as const, client: clientNames.get(project.clientId) ?? null, status: project.status, updatedAt: project.updatedAt })),
   ].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()).slice(0, 6);
+  if (unavailable && !globalError) return <section className="dash-panel dash-workspace-panel"><div className="dash-panel-head"><div><FolderOpen size={17} /><strong>Quick Access Workspace Folders</strong></div></div><SectionError message={errorMessage} onRetry={onRetry} /></section>;
   if (!loading && !workspaces.length) return <section className="dash-panel dash-workspace-panel"><div className="dash-panel-head"><div><FolderOpen size={17} /><strong>Quick Access Workspace Folders</strong></div><Link className="dash-workspace-view-all" to={viewAllPath}>View all</Link></div><div className="dash-workspace-grid dash-workspace-grid--empty"><DashboardEmptyState description="Workspace folders will appear here once projects or bids are created." icon={FolderOpen} title="No workspace folders available yet." /></div></section>;
-  return <section className="dash-panel dash-workspace-panel"><div className="dash-panel-head"><div><FolderOpen size={17} /><strong>Quick Access Workspace Folders</strong></div><Link className="dash-workspace-view-all" to={viewAllPath}>View all</Link></div><div className="dash-workspace-grid">{loading ? <p>Loading workspaces...</p> : workspaces.length ? workspaces.map((workspace) => { const path = `/${workspace.type === 'Bid' ? 'bids' : 'projects'}/${workspace.id}`; return <article aria-label={`Open ${workspace.name}`} key={`${workspace.type}-${workspace.id}`} onClick={() => navigate(path)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(path); } }} role="link" tabIndex={0}><div className={`dash-workspace-icon dash-workspace-icon--${workspace.type.toLowerCase()}`}><FolderOpen size={18} /></div><div className="dash-workspace-copy"><div className="dash-workspace-title"><strong title={workspace.name}>{workspace.name}</strong><em>{workspace.type}</em></div><small><span title={workspace.client ?? undefined}>Client: <b>{workspace.client ?? '—'}</b></span><span title={workspace.status || undefined}>STATUS: <b>{workspace.status || '—'}</b></span></small></div><ArrowRight size={17} /></article>; }) : <p>No project or bid workspaces are available yet.</p>}</div></section>;
+  return <section className="dash-panel dash-workspace-panel"><div className="dash-panel-head"><div><FolderOpen size={17} /><strong>Quick Access Workspace Folders</strong></div><Link className="dash-workspace-view-all" to={viewAllPath}>View all</Link></div><div className="dash-workspace-grid">{loading ? <p>{unavailable ? 'Workspaces are unavailable.' : 'Loading workspaces...'}</p> : workspaces.length ? workspaces.map((workspace) => { const path = `/${workspace.type === 'Bid' ? 'bids' : 'projects'}/${workspace.id}`; return <article aria-label={`Open ${workspace.name}`} key={`${workspace.type}-${workspace.id}`} onClick={() => navigate(path)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(path); } }} role="link" tabIndex={0}><div className={`dash-workspace-icon dash-workspace-icon--${workspace.type.toLowerCase()}`}><FolderOpen size={18} /></div><div className="dash-workspace-copy"><div className="dash-workspace-title"><strong title={workspace.name}>{workspace.name}</strong><em>{workspace.type}</em></div><small><span title={workspace.client ?? undefined}>Client: <b>{workspace.client ?? '—'}</b></span><span title={workspace.status || undefined}>STATUS: <b>{workspace.status || '—'}</b></span></small></div><ArrowRight size={17} /></article>; }) : <p>No project or bid workspaces are available yet.</p>}</div></section>;
 }
 
 function clientNameFromBid(bid: Bid, clientNames: Map<string, string>) {
@@ -94,7 +107,7 @@ function clientNameFromBid(bid: Bid, clientNames: Map<string, string>) {
   return embeddedClient ?? clientNames.get(bid.clientId) ?? null;
 }
 
-function QuickActions({ can, onBid, onProject, onWorkRequest, onUpload, onDivision, onMember, onTeam, onWorkspaces, onWorkRequests, onDocuments }: { can: (permission: string) => boolean; onBid: () => void; onProject: () => void; onWorkRequest: () => void; onUpload: () => void; onDivision: () => void; onMember: () => void; onTeam: () => void; onWorkspaces: () => void; onWorkRequests: () => void; onDocuments: () => void }) {
+function QuickActions({ can, unavailable, referenceFailures, referenceDetail, onRetryReference, onBid, onProject, onWorkRequest, onUpload, onDivision, onMember, onTeam, onWorkspaces, onWorkRequests, onDocuments }: { can: (permission: string) => boolean; unavailable: boolean; referenceFailures: string[]; referenceDetail?: string; onRetryReference: () => void; onBid: () => void; onProject: () => void; onWorkRequest: () => void; onUpload: () => void; onDivision: () => void; onMember: () => void; onTeam: () => void; onWorkspaces: () => void; onWorkRequests: () => void; onDocuments: () => void }) {
   const actions = [
     { label: 'Create Bid', icon: FilePlus2, onClick: onBid, include: can('CREATE_BID') },
     { label: 'Projects / Bids', icon: FolderOpen, onClick: onWorkspaces, include: can('VIEW_BID') || can('VIEW_PROJECT') },
@@ -107,7 +120,7 @@ function QuickActions({ can, onBid, onProject, onWorkRequest, onUpload, onDivisi
     { label: 'Create Member', icon: Users, onClick: onMember, include: can('CREATE_MEMBER') },
     { label: 'Create Team', icon: UsersRound, onClick: onTeam, include: can('CREATE_TEAM') },
   ].filter((action) => action.include);
-  return <section className="dash-panel dash-actions-panel"><div className="dash-panel-head"><div><BadgeCheck size={17} /><strong>Quick actions</strong></div></div><div className={`dash-actions-grid${actions.length % 2 ? ' dash-actions-grid--odd' : ''}`}>{actions.map((action) => <button key={action.label} onClick={action.onClick} type="button"><span><action.icon size={17} /></span>{action.label}</button>)}</div></section>;
+  return <section className="dash-panel dash-actions-panel"><div className="dash-panel-head"><div><BadgeCheck size={17} /><strong>Quick actions</strong></div></div><div className={`dash-actions-grid${actions.length % 2 ? ' dash-actions-grid--odd' : ''}`}>{actions.map((action) => <button disabled={(unavailable && !['Projects / Bids', 'Work Requests', 'Documents'].includes(action.label)) || (referenceFailures.length > 0 && ((action.label === 'Create Member' && referenceFailures.some((item) => ['designations', 'divisions', 'members'].includes(item))) || (action.label === 'Create Team' && referenceFailures.includes('divisions')) || (['Create Bid', 'Create Project'].includes(action.label) && referenceFailures.includes('clients')) || (action.label === 'Create Work Request' && referenceFailures.includes('divisions'))))} title={referenceFailures.length && !unavailable ? 'Required information could not be loaded.' : undefined} key={action.label} onClick={action.onClick} type="button"><span><action.icon size={17} /></span>{action.label}</button>)}</div>{referenceFailures.length && !unavailable ? <SectionError detail={referenceDetail} message={`Unable to load ${referenceFailures.join(', ')}.`} onRetry={onRetryReference} /> : null}</section>;
 }
 
 function UploadDocumentModal({ onClose }: { onClose: () => void }) {
@@ -117,14 +130,16 @@ function UploadDocumentModal({ onClose }: { onClose: () => void }) {
   return <div className="division-modal-backdrop" role="presentation"><section aria-modal="true" className="division-modal division-modal--wide" role="dialog"><div className="division-modal__head"><div><strong>Upload Document</strong><span>Select files and classify each attachment.</span></div><button aria-label="Close upload dialog" onClick={onClose} type="button">X</button></div><form className="division-form" onSubmit={(event) => { event.preventDefault(); onClose(); }}><AttachmentUpload attachments={attachments} codes={codes} disabled={codesQuery.isLoading} onAdd={(files) => setAttachments((current) => [...current, ...files.map(createPendingAttachment)])} onDocumentCodeChange={(id, documentCodeId) => setAttachments((current) => current.map((item) => item.id === id ? { ...item, documentCodeId } : item))} onRemove={(id) => setAttachments((current) => current.filter((item) => item.id !== id))} /><div className="division-form__actions"><button onClick={onClose} type="button">Cancel</button><button type="submit">Continue</button></div></form></section></div>;
 }
 
-function CriticalWork({ workRequests, loading }: { workRequests: WorkRequest[]; loading: boolean }) {
+function CriticalWork({ workRequests, loading, unavailable, globalError, onRetry, detail }: { workRequests: WorkRequest[]; loading: boolean; unavailable: boolean; globalError: boolean; onRetry: () => void; detail?: string }) {
   const requests = [...workRequests].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()).slice(0, 5);
+  if (unavailable && !globalError) return <section className="dash-panel dash-critical-panel"><div className="dash-panel-head"><div><strong>Work Requests</strong></div></div><SectionError detail={detail} message="Unable to load work requests." onRetry={onRetry} /></section>;
   if (!loading && !requests.length) return <section className="dash-panel dash-critical-panel"><div className="dash-panel-head"><div><strong>Work Requests</strong></div></div><div className="dash-critical-table"><DashboardEmptyState description="Work requests will appear here once they are created or assigned to you." icon={ClipboardList} title="No work requests available yet." /></div></section>;
-  return <section className="dash-panel dash-critical-panel"><div className="dash-panel-head"><div><strong>Work Requests</strong></div></div><div className="dash-critical-table"><div className="dash-critical-row dash-critical-row--head"><span>Title</span><span>Type</span><span>Ship. No</span><span>Revision</span><span>Last Update</span><span>Status</span><span>Actions</span></div>{loading ? <p>Loading current work requests...</p> : requests.map((request) => <div className="dash-critical-row" key={request.id}><div><strong>{request.title}</strong><small>WR-{request.id.slice(0, 8).toUpperCase()}</small></div><span>{request.projectId ? 'Project' : request.bidId ? 'Bid' : 'General'}</span><span>{requestValue(request, 'shipmentNumber', 'shipmentNo') ?? '—'}</span><span>{requestValue(request, 'revision', 'revisionNumber') ?? '—'}</span><small>{formatDate(request.updatedAt)}</small><span><em>{request.currentState || '—'}</em></span><Link className="dash-critical-action" to={`/work-requests/${request.id}`}>View</Link></div>)}{!loading && !requests.length ? <p>No work requests are available yet.</p> : null}</div></section>;
+  return <section className="dash-panel dash-critical-panel"><div className="dash-panel-head"><div><strong>Work Requests</strong></div></div><div className="dash-critical-table"><div className="dash-critical-row dash-critical-row--head"><span>Title</span><span>Type</span><span>Ship. No</span><span>Revision</span><span>Last Update</span><span>Status</span><span>Actions</span></div>{loading ? <p>{unavailable ? 'Work requests are unavailable.' : 'Loading current work requests...'}</p> : requests.map((request) => <div className="dash-critical-row" key={request.id}><div><strong>{request.title}</strong><small>WR-{request.id.slice(0, 8).toUpperCase()}</small></div><span>{request.projectId ? 'Project' : request.bidId ? 'Bid' : 'General'}</span><span>{requestValue(request, 'shipmentNumber', 'shipmentNo') ?? '—'}</span><span>{requestValue(request, 'revision', 'revisionNumber') ?? '—'}</span><small>{formatDate(request.updatedAt)}</small><span><em>{request.currentState || '—'}</em></span><Link className="dash-critical-action" to={`/work-requests/${request.id}`}>View</Link></div>)}{!loading && !requests.length ? <p>No work requests are available yet.</p> : null}</div></section>;
 }
 
-function ActivityTrail({ bids, projects, workRequests }: { bids: Bid[]; projects: Project[]; workRequests: WorkRequest[] }) {
+function ActivityTrail({ bids, projects, workRequests, unavailable, loading, globalError, onRetry }: { bids: Bid[]; projects: Project[]; workRequests: WorkRequest[]; unavailable: boolean; loading: boolean; globalError: boolean; onRetry: () => void }) {
   const activity = [...workRequests.map((item) => ({ id: `wr-${item.id}`, label: item.title, type: 'Work request updated', date: item.updatedAt })), ...bids.map((item) => ({ id: `bid-${item.id}`, label: item.name, type: 'Bid updated', date: item.updatedAt })), ...projects.map((item) => ({ id: `project-${item.id}`, label: item.name, type: 'Project updated', date: item.updatedAt }))].sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()).slice(0, 4);
+  if (unavailable || loading) return <section className="dash-panel dash-activity-panel"><div className="dash-panel-head"><div><Clock3 size={17} /><strong>System activity</strong></div></div><div className="dash-activity-list">{unavailable && !globalError ? <SectionError message="Unable to load system activity." onRetry={onRetry} /> : <p>{unavailable ? 'Activity is unavailable.' : 'Loading activity...'}</p>}</div></section>;
   if (!activity.length) return <section className="dash-panel dash-activity-panel"><div className="dash-panel-head"><div><Clock3 size={17} /><strong>System activity</strong></div><span>Live log</span></div><div className="dash-activity-list"><DashboardEmptyState description="Updates from projects, bids, and work requests will appear here." icon={Clock3} title="No system activity available yet." /></div></section>;
   return <section className="dash-panel dash-activity-panel"><div className="dash-panel-head"><div><Clock3 size={17} /><strong>System activity</strong></div><span>Live log</span></div><div className="dash-activity-list">{activity.length ? activity.map((item) => <article key={item.id}><span><Clock3 size={15} /></span><div><strong>{item.type}</strong><p>{item.label}</p><small>{formatDate(item.date)}</small></div></article>) : <p>Recent project activity will appear here.</p>}</div></section>;
 }
@@ -280,17 +295,38 @@ export function DashboardWorkspace({ modalOnly = false, createType, createReques
     if (create && !modalOnly) window.history.replaceState(null, '', '/dashboard');
   }, [createRequest, createType, modalOnly, preselectedDivisionId]);
 
+  const retryDashboardQuery = (count: number, error: unknown) => !isUnavailableError(error) && !(error instanceof ApiClientError && error.status >= 400 && error.status < 500) && count < 3;
   const divisionsQuery = useQuery({
+    retry: retryDashboardQuery,
     queryKey: divisionsQueryKey,
     queryFn: getDivisions, enabled: can('VIEW_DIVISIONS'),
   });
 
-  const membersQuery = useQuery({ queryKey: membersQueryKey, queryFn: getMembers, enabled: canViewMembers });
-  const designationsQuery = useQuery({ queryKey: designationsQueryKey, queryFn: getDesignations, enabled: can('VIEW_DESIGNATIONS') });
-  const bidsQuery = useQuery({ queryKey: ['bids'], queryFn: getBids, enabled: canViewBid });
-  const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: getProjects, enabled: canViewProject });
-  const workRequestsQuery = useQuery({ queryKey: ['work-requests'], queryFn: getWorkRequests, enabled: canViewWorkRequest });
-  const clientsQuery = useQuery({ queryKey: ['clients'], queryFn: getClients, enabled: can('VIEW_CLIENTS') && (canViewBid || canViewProject) });
+  const membersQuery = useQuery({ retry: retryDashboardQuery, queryKey: membersQueryKey, queryFn: getMembers, enabled: canViewMembers });
+  const designationsQuery = useQuery({ retry: retryDashboardQuery, queryKey: designationsQueryKey, queryFn: getDesignations, enabled: can('VIEW_DESIGNATIONS') });
+  const bidsQuery = useQuery({ retry: retryDashboardQuery, queryKey: ['bids'], queryFn: getBids, enabled: canViewBid });
+  const projectsQuery = useQuery({ retry: retryDashboardQuery, queryKey: ['projects'], queryFn: getProjects, enabled: canViewProject });
+  const workRequestsQuery = useQuery({ retry: retryDashboardQuery, queryKey: ['work-requests'], queryFn: getWorkRequests, enabled: canViewWorkRequest });
+  const clientsQuery = useQuery({ retry: retryDashboardQuery, queryKey: ['clients'], queryFn: getClients, enabled: can('VIEW_CLIENTS') && (canViewBid || canViewProject) });
+
+  const teamsQuery = useQuery({ retry: retryDashboardQuery, queryKey: ['teams'], queryFn: () => getTeams({ page: 1, limit: 100 }), enabled: can('VIEW_TEAMS') || can('CREATE_TEAM') });
+  const dashboardQueries = [teamsQuery, divisionsQuery, membersQuery, designationsQuery, bidsQuery, projectsQuery, workRequestsQuery, clientsQuery];
+  const serverUnavailable = hasDashboardOutage(dashboardQueries.map((query) => ({ failed: query.isError, network: isUnavailableError(query.error), succeeded: query.isSuccess })));
+  const retrying = dashboardQueries.some((query) => isUnavailableError(query.error) && query.isFetching);
+  const retryUnavailableQueries = () => {
+    retryFailedDashboardQueries(dashboardQueries);
+  };
+  const workspaceUnavailable = (canViewBid && bidsQuery.isError) || (canViewProject && projectsQuery.isError) || (can('VIEW_CLIENTS') && clientsQuery.isError);
+  const activityUnavailable = (canViewBid && bidsQuery.isError) || (canViewProject && projectsQuery.isError) || (canViewWorkRequest && workRequestsQuery.isError);
+  const activityLoading = (canViewBid && bidsQuery.isLoading) || (canViewProject && projectsQuery.isLoading) || (canViewWorkRequest && workRequestsQuery.isLoading);
+  const workspaceQueries = [bidsQuery, projectsQuery, clientsQuery];
+  const activityQueries = [bidsQuery, projectsQuery, workRequestsQuery];
+  const retryQueries = retryFailedDashboardQueries;
+  const referenceQueries = [
+    { name: 'designations', query: designationsQuery }, { name: 'divisions', query: divisionsQuery },
+    { name: 'members', query: membersQuery }, { name: 'clients', query: clientsQuery },
+  ].filter(({ query }) => query.isError);
+  const metricState = (query: { isLoading: boolean; isError: boolean; error: unknown; refetch: () => unknown }): MetricState => ({ loading: query.isLoading, failed: query.isError, network: isUnavailableError(query.error), retry: () => { void query.refetch(); }, detail: query.isError && query.error instanceof ApiClientError && query.error.status < 500 ? getApiErrorMessage(query.error) : undefined });
 
   const divisions = useMemo(() => divisionsQuery.data?.items ?? [], [divisionsQuery.data]);
   const members = useMemo(() => membersQuery.data?.items ?? [], [membersQuery.data]);
@@ -407,17 +443,15 @@ export function DashboardWorkspace({ modalOnly = false, createType, createReques
 
         </div>
       </header>
-      {divisionsQuery.isError ? <div className="division-alert">{getApiErrorMessage(divisionsQuery.error)}</div> : null}
-      {membersQuery.isError ? <div className="division-alert">{getApiErrorMessage(membersQuery.error)}</div> : null}
-      {designationsQuery.isError ? <div className="division-alert">Unable to load designations. Member creation is unavailable until the list can be loaded.</div> : null}
-      <MetricsStrip bids={bids} canViewBid={canViewBid} canViewDocument={canViewDocument} canViewProject={canViewProject} canViewWorkRequest={canViewWorkRequest} loading={bidsQuery.isLoading || projectsQuery.isLoading || workRequestsQuery.isLoading} projects={projects} workRequests={workRequests} />
+      {serverUnavailable ? <div className="dash-outage" role="alert"><AlertCircle aria-hidden="true" size={20} /><div><strong>We couldn't load the dashboard</strong><p>The server is currently unavailable or the connection failed. Please try again.</p></div><button disabled={retrying} onClick={retryUnavailableQueries} type="button">{retrying ? 'Retrying...' : 'Retry'}</button></div> : null}
+      <MetricsStrip bids={bids} bidState={metricState(bidsQuery)} projectState={metricState(projectsQuery)} workRequestState={metricState(workRequestsQuery)} globalError={serverUnavailable} canViewBid={canViewBid} canViewDocument={canViewDocument} canViewProject={canViewProject} canViewWorkRequest={canViewWorkRequest} projects={projects} workRequests={workRequests} />
       <div className="dash-top-grid">
-        {canViewBid || canViewProject ? <QuickAccess bids={bids} clientNames={clientNames} loading={bidsQuery.isLoading || projectsQuery.isLoading || clientsQuery.isLoading} projects={projects} viewAllPath={canViewBid ? '/bids' : '/projects'} /> : null}
-        <QuickActions can={can} onBid={() => setBidCreateRequest((current) => current + 1)} onDivision={openCreateDivisionModal} onDocuments={() => navigate('/documents')} onMember={openCreateMemberModal} onProject={() => setProjectCreateRequest((current) => current + 1)} onTeam={() => setTeamCreateRequest((current) => current + 1)} onUpload={() => setIsUploadModalOpen(true)} onWorkRequest={() => setWorkRequestCreateRequest((current) => current + 1)} onWorkRequests={() => navigate('/work-requests')} onWorkspaces={() => navigate(canViewBid ? '/bids' : '/projects')} />
+        {canViewBid || canViewProject ? <QuickAccess errorMessage={clientsQuery.isError && !bidsQuery.isError && !projectsQuery.isError ? "Unable to load clients." : "Unable to load workspace folders."} globalError={serverUnavailable} onRetry={() => retryQueries(workspaceQueries)} unavailable={workspaceUnavailable} bids={bids} clientNames={clientNames} loading={bidsQuery.isLoading || projectsQuery.isLoading || clientsQuery.isLoading || workspaceUnavailable} projects={projects} viewAllPath={canViewBid ? '/bids' : '/projects'} /> : null}
+        <QuickActions referenceDetail={referenceQueries.map(({ query }) => metricState(query).detail).filter(Boolean).join(' ') || undefined} referenceFailures={referenceQueries.map(({ name }) => name)} onRetryReference={() => retryQueries(referenceQueries.map(({ query }) => query))} unavailable={serverUnavailable} can={can} onBid={() => setBidCreateRequest((current) => current + 1)} onDivision={openCreateDivisionModal} onDocuments={() => navigate('/documents')} onMember={openCreateMemberModal} onProject={() => setProjectCreateRequest((current) => current + 1)} onTeam={() => setTeamCreateRequest((current) => current + 1)} onUpload={() => setIsUploadModalOpen(true)} onWorkRequest={() => setWorkRequestCreateRequest((current) => current + 1)} onWorkRequests={() => navigate('/work-requests')} onWorkspaces={() => navigate(canViewBid ? '/bids' : '/projects')} />
       </div>
       <div className="dash-bottom-grid">
-        {canViewWorkRequest ? <CriticalWork loading={workRequestsQuery.isLoading} workRequests={workRequests} /> : null}
-        {canViewBid || canViewProject || canViewWorkRequest ? <ActivityTrail bids={bids} projects={projects} workRequests={workRequests} /> : null}
+        {canViewWorkRequest ? <CriticalWork detail={metricState(workRequestsQuery).detail} globalError={serverUnavailable} onRetry={() => { void workRequestsQuery.refetch(); }} unavailable={workRequestsQuery.isError} loading={workRequestsQuery.isLoading || workRequestsQuery.isError} workRequests={workRequests} /> : null}
+        {canViewBid || canViewProject || canViewWorkRequest ? <ActivityTrail loading={activityLoading} globalError={serverUnavailable} onRetry={() => retryQueries(activityQueries)} unavailable={activityUnavailable} bids={bids} projects={projects} workRequests={workRequests} /> : null}
       </div>
       {canViewBid || can('CREATE_BID') ? <BidsPanel createRequest={bidCreateRequest} modalOnly /> : null}
       {canViewProject || can('CREATE_PROJECT') ? <ProjectsPanel createRequest={projectCreateRequest} modalOnly /> : null}

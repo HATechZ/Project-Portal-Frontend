@@ -152,6 +152,22 @@
 .settings-configuration-panel .division-actions--destructive button:last-child { border-color: #d99ca0; color: #9c3038; }
 .division-empty { padding: 22px 18px; color: #607780; font-size: 13px; }
 
+/* Member role assignment keeps every active assignment independently actionable. */
+.manage-member-role-modal .division-form { overflow-y: auto; }
+.manage-member-role-modal__current { align-items: start; }
+.manage-member-role-modal__actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.manage-member-role-modal__actions select { min-width: 150px; max-width: 210px; height: 32px; border: 1px solid #cbdadd; border-radius: 6px; background: #fff; color: #29454e; padding: 0 8px; font-size: 11px; }
+.manage-member-role-modal__history > button { border: 1px solid #cbdadd; border-radius: 6px; background: #fff; color: #075b65; padding: 7px 10px; font-size: 11px; font-weight: 750; }
+.manage-member-role-modal__history > div { display: grid; gap: 7px; margin-top: 10px; }
+.manage-member-role-modal__confirmation { position: fixed; inset: 0; z-index: 1; }
+
+@media (max-width: 700px) {
+  .manage-member-role-modal__current { align-items: stretch; }
+  .manage-member-role-modal__actions { justify-content: stretch; }
+  .manage-member-role-modal__actions select,
+  .manage-member-role-modal__actions button { flex: 1 1 130px; max-width: none; }
+}
+
 @media (max-width: 1024px) {
   .settings-configuration-panel .division-grid,
   .settings-configuration-panel .role-grid { min-width: 720px; }

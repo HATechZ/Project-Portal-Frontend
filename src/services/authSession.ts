@@ -6,6 +6,7 @@ export type StoredUser = {
   roles?: string[];
   permissions?: unknown;
   roleScopes?: unknown;
+  activeActorProfileId?: string | null;
   [key: string]: unknown;
 };
 
@@ -21,9 +22,21 @@ function parseStoredUser(value: string | null): StoredUser | null {
 // localStorage (and parsing JSON) here would create a new object for each
 // snapshot read and cause React to keep scheduling updates.
 let cachedUser: StoredUser | null = typeof window === 'undefined' ? null : parseStoredUser(localStorage.getItem('user'));
+let actorProfileSwitching = false;
 
 export function readStoredUser(): StoredUser | null {
   return cachedUser;
+}
+
+export function readActorProfileSwitching() {
+  return actorProfileSwitching;
+}
+
+/** Keep permission-gated UI out of view while the server changes actor context. */
+export function setActorProfileSwitching(value: boolean) {
+  if (actorProfileSwitching === value) return;
+  actorProfileSwitching = value;
+  notifyAuthSessionChanged();
 }
 
 function updateCachedUser(user: StoredUser | null) {
@@ -48,6 +61,7 @@ export function clearStoredUser() {
 
 /** Remove every browser-side value that can identify or authorize an actor. */
 export function clearAuthenticatedBrowserState() {
+  actorProfileSwitching = false;
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
   // Older builds used several auth-prefixed keys. Do not retain one across a

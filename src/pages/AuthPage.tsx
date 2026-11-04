@@ -7,7 +7,7 @@ import { toast } from 'react-toastify';
 import { countries, getCountryShortName } from '@/constants/countries';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { ApiClientError } from '@/services/apiClient';
-import { getCurrentUser, login } from '@/services/authService';
+import { getActorProfiles, getCurrentUser, login } from '@/services/authService';
 import { clearAuthenticatedBrowserState, persistUser } from '@/services/authSession';
 import { resetAuthScopedQueries } from '@/services/authQueryCache';
 import { getCompanyTypes, signupCompany } from '@/services/companyService';
@@ -375,15 +375,18 @@ function LoginScreen({ showReference = false }: { showReference?: boolean }) {
       localStorage.setItem('accessToken', response.data.tokens.accessToken);
       localStorage.setItem('refreshToken', response.data.tokens.refreshToken);
       try {
-        return { response, activeUser: await getCurrentUser() };
+        const activeUser = await getCurrentUser();
+        const profiles = await getActorProfiles();
+        return { response, activeUser, profiles };
       } catch (error) {
         clearAuthenticatedBrowserState();
         throw error;
       }
     },
-    onSuccess: async ({ response, activeUser }) => {
+    onSuccess: async ({ response, activeUser, profiles }) => {
       persistUser(activeUser);
       await resetAuthScopedQueries(queryClient);
+      queryClient.setQueryData(['actor-profiles'], profiles);
       toast.success(response.message || 'Login successful');
       navigate('/dashboard');
     },

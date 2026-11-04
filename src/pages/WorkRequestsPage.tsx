@@ -29,7 +29,7 @@ const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const fileAccept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.dwg,.dxf,.jpg,.jpeg,.png,.zip';
 
 export function WorkRequestsPage({ createRequest = 0, embedded = false, modalOnly = false, filterText = '' }: { createRequest?: number; embedded?: boolean; modalOnly?: boolean; filterText?: string }) {
-  const { can } = usePermissions();
+  const { can, user } = usePermissions();
   const canViewWorkRequests = can('VIEW_WORK_REQUEST');
   const canCreateWorkRequests = can('CREATE_WORK_REQUEST');
   const canUpdateWorkRequests = can('UPDATE_WORK_REQUEST');
@@ -48,7 +48,10 @@ export function WorkRequestsPage({ createRequest = 0, embedded = false, modalOnl
   const projectsQuery = useQuery({ queryKey: ['projects'], queryFn: getProjects, enabled: modal === 'create' && canCreateWorkRequests && can('VIEW_PROJECT') });
   const divisionsQuery = useQuery({ queryKey: ['divisions'], queryFn: getDivisions, enabled: modal === 'create' && canCreateWorkRequests && can('VIEW_DIVISIONS') });
   const profilesQuery = useQuery({ queryKey: ['actor-profiles'], queryFn: getActorProfiles, enabled: modal === 'create' && canCreateWorkRequests });
-  const activeProfile = profilesQuery.data?.find((profile) => profile.isDefault) ?? null;
+  const activeActorProfileId = typeof user?.activeActorProfileId === 'string' ? user.activeActorProfileId : null;
+  const activeProfile = activeActorProfileId
+    ? profilesQuery.data?.find((profile) => profile.id === activeActorProfileId) ?? null
+    : profilesQuery.data?.find((profile) => profile.isCurrent) ?? null;
   const requiresResponsibleLead = activeProfile?.memberId === null;
   const originatingLeadQuery = useQuery({ queryKey: ['division-lead', createForm.originatingDivisionId], queryFn: () => getDivisionLead(createForm.originatingDivisionId), enabled: modal === 'create' && requiresResponsibleLead === true && Boolean(createForm.originatingDivisionId) });
   const documentCodesQuery = useQuery({ queryKey: ['work-requests', 'creation', 'available-document-codes', createForm.originatingDivisionId], queryFn: () => getWorkRequestCreationAvailableDocumentCodes(createForm.originatingDivisionId), enabled: modal === 'create' && canCreateWorkRequests && Boolean(createForm.originatingDivisionId) });

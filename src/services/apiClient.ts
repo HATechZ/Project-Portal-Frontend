@@ -28,6 +28,28 @@ export class ApiClientError extends Error {
   }
 }
 
+export class ApiNetworkError extends Error {
+  cause: unknown;
+  constructor(cause: unknown) {
+    super('Unable to connect to the server.');
+    this.name = 'ApiNetworkError';
+    this.cause = cause;
+  }
+}
+
+export function isApiNetworkError(error: unknown): error is ApiNetworkError {
+  return error instanceof ApiNetworkError;
+}
+
+async function fetchApi(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error;
+    throw new ApiNetworkError(error);
+  }
+}
+
 function clearSessionTokens() {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
@@ -67,7 +89,7 @@ export async function apiClient<T>(path: string, init?: RequestInit, retryOnUnau
     headers.set('Authorization', `Bearer ${accessToken}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchApi(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       ...Object.fromEntries(headers.entries()),
@@ -123,7 +145,7 @@ export async function apiClientBlob(path: string, init?: RequestInit): Promise<B
   const headers = new Headers(init?.headers);
   if (!headers.has('Content-Type') && !(init?.body instanceof FormData)) headers.set('Content-Type', 'application/json');
   if (accessToken && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${accessToken}`);
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  const response = await fetchApi(`${API_BASE_URL}${path}`, { ...init, headers });
   if (!response.ok) {
     let data: unknown = null;
     try { data = await response.json(); } catch { data = { message: response.statusText }; }

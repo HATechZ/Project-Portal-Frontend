@@ -5,18 +5,21 @@ export type LoginPayload = {
   password: string;
 };
 
+export type AuthUser = {
+  id: string;
+  fullName: string;
+  email: string;
+  country: string;
+  phone: string;
+  avatarUrl: string | null;
+  roles: string[];
+  roleScopes: string[];
+  permissions: string[];
+  activeActorProfileId: string | null;
+};
+
 export type LoginResponse = {
-  user: {
-    id: string;
-    fullName: string;
-    email: string;
-    country: string;
-    phone: string;
-    avatarUrl: string | null;
-    roles: string[];
-    roleScopes: string[];
-    permissions: string[];
-  };
+  user: AuthUser;
   tokens: {
     accessToken: string;
     refreshToken: string;
@@ -33,7 +36,9 @@ export type ActorProfile = {
   label: string;
   memberId: string | null;
   clientContactId: string | null;
-  isDefault: boolean;
+  /** The one profile currently acting for this session. */
+  isCurrent: boolean;
+  /** Lifecycle status only; several enabled profiles can have this set. */
   isActive: boolean;
 };
 
@@ -80,7 +85,7 @@ export function logout(accessToken: string | null) {
 
 export function getCurrentUser() {
   const accessToken = localStorage.getItem('accessToken');
-  return apiClient<ApiResponse<LoginResponse['user']>>('/auth/me', {
+  return apiClient<ApiResponse<AuthUser>>('/auth/me', {
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
   }).then((response) => response.data);
 }

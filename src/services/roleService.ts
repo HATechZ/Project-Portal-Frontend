@@ -127,6 +127,10 @@ export function getUserRoles(userId: string) {
   return apiClient<ApiResponse<UserRole[]>>(`/user/${userId}/role`).then(unwrap);
 }
 
+export function getUserRoleHistory(userId: string) {
+  return apiClient<ApiResponse<UserRole[]>>(`/user/${userId}/role?includeRevoked=true`).then(unwrap);
+}
+
 export function getUserRoleOptions(userId: string) {
   return apiClient<ApiResponse<Pick<AccessRole, 'id' | 'code' | 'name' | 'description' | 'isSystemRole' | 'scope'>[]>>(`/user/${userId}/role-options`).then(unwrap);
 }
@@ -145,6 +149,13 @@ export function assignUserRole(userId: string, payload: AssignUserRolePayload) {
 export function revokeUserRole(userId: string, roleId: string) {
   // This endpoint intentionally returns an empty successful response.
   return apiClient<unknown>(`/user/${userId}/role/${roleId}`, { method: 'DELETE' });
+}
+
+export function reassignUserRole(userId: string, oldRoleId: string, newRoleId: string) {
+  return apiClient<ApiResponse<UserRole>>(`/user/${userId}/role/${oldRoleId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ newRoleId }),
+  }).then(unwrap);
 }
 
 export function readableApiError(error: unknown, fallback: string) {

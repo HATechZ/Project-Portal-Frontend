@@ -52,6 +52,7 @@ export type WorkRequestAssignment = {
   replacedAt: string | null;
   note: string | null;
   assignedBy: { id: string; label: string };
+  responsibleRecipients?: Array<{ actorId: string; memberId: string; label: string; displayName?: string }>;
 };
 
 export type WorkRequestEvent = {
@@ -157,7 +158,19 @@ export type WorkRequestInternalCycle = {
 };
 
 export type WorkRequestRouteRecipient = { id: string; label?: string; name?: string; email?: string };
-export type WorkRequestInfoRequest = { id: string; message: string; status: string; requestedAt: string; target: { actorId: string; type: string }; requester: { actorId: string; type: string } };
+/** Backend-owned recipient target. Its identifier is returned by the recipients endpoint and is sent back unchanged. */
+export type WorkRequestInfoRequestRecipient = { actorId: string; actorProfileId: string; label?: string; displayName?: string; email?: string; canRespond?: boolean; [key: string]: unknown };
+export type WorkRequestInfoRecipientStatus = {
+  activeContacts: number;
+  contactsWithActiveDefaultProfile: number;
+  unavailableContacts: Array<{ contactId: string; displayName: string; email?: string; context?: { name?: string }; [key: string]: unknown }>;
+};
+export type WorkRequestInfoRequest = {
+  id: string; message: string; status: string; requestedAt: string;
+  target: { actorId: string; type: string }; requester: { actorId: string; type: string };
+  attachments?: Array<{ documentVersionId: string }>;
+  responses?: Array<{ id: string; message: string; respondedAt: string; responder: { actorId: string; type: string }; attachments?: Array<{ documentVersionId: string }> }>;
+};
 
 export type CreateWorkRequestInput = {
   parentType: 'BID' | 'PROJECT';
@@ -442,6 +455,21 @@ export function sendWorkRequestRouteMessage(id: string, recipientActorIds: strin
 
 export function getWorkRequestInfoRequests(id: string) {
   return apiClient<ApiResponse<WorkRequestInfoRequest[]>>(`${requestPath(id)}/info-requests`).then((response) => response.data);
+}
+
+export function getWorkRequestInfoRequestRecipients(id: string) {
+  return apiClient<ApiResponse<WorkRequestInfoRequestRecipient[]>>(`${requestPath(id)}/info-requests/recipients`).then((response) => response.data);
+}
+
+export function getWorkRequestInfoRecipientStatus(id: string) {
+  return apiClient<ApiResponse<WorkRequestInfoRecipientStatus>>(`${requestPath(id)}/info-requests/recipients/status`).then((response) => response.data);
+}
+
+export function createWorkRequestInfoRequest(id: string, targetActorId: string, message: string, documentVersionIds: string[]) {
+  return apiClient<ApiResponse<unknown>>(`${requestPath(id)}/info-requests`, {
+    method: 'POST',
+    body: JSON.stringify({ targetActorId, message, ...(documentVersionIds.length ? { documentVersionIds } : {}) }),
+  }).then((response) => response.data);
 }
 
 export function respondToWorkRequestInfo(id: string, infoRequestId: string, message: string, documentVersionIds?: string[]) {

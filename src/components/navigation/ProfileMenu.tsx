@@ -4,8 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { activateActorProfile, getActorProfiles, getCurrentUser, logout } from '@/services/authService';
-import { clearAuthenticatedBrowserState, persistUser, readStoredUser } from '@/services/authSession';
+import { clearAuthenticatedBrowserState, persistUser, readStoredUser, setActorProfileSwitching } from '@/services/authSession';
 import { resetAuthScopedQueries } from '@/services/authQueryCache';
+import { readableApiError } from '@/services/roleService';
 
 export function ProfileMenu() {
   const navigate = useNavigate();
@@ -16,7 +17,15 @@ export function ProfileMenu() {
   const userName = user?.fullName ?? '';
   const email = user?.email ?? '';
   const initials = getInitials(userName);
-  const profilesQuery = useQuery({ queryKey: ['actor-profiles'], queryFn: getActorProfiles, enabled: open });
+  const profilesQuery = useQuery({ queryKey: ['actor-profiles'], queryFn: getActorProfiles });
+  const activeProfiles = (profilesQuery.data ?? []).filter((profile) => profile.isActive !== false);
+  const activeActorProfileId = typeof user?.activeActorProfileId === 'string' ? user.activeActorProfileId : null;
+  // `isActive` only tells us a profile is usable. Prefer the acting profile ID
+  // returned by /auth/me, with the server's isCurrent flag as the API fallback.
+  const currentProfile = activeActorProfileId
+    ? activeProfiles.find((profile) => profile.id === activeActorProfileId) ?? null
+    : activeProfiles.find((profile) => profile.isCurrent) ?? null;
+  const switchableProfiles = activeProfiles.filter((profile) => profile.id !== currentProfile?.id);
 
   const logoutMutation = useMutation({
     mutationFn: (accessToken: string | null) => logout(accessToken),
@@ -33,16 +42,23 @@ export function ProfileMenu() {
   const activateProfileMutation = useMutation({
     mutationFn: async (profileId: string) => {
       await activateActorProfile(profileId);
-      return getCurrentUser();
+      const [activeUser, profiles] = await Promise.all([getCurrentUser(), getActorProfiles()]);
+      return { activeUser, profiles };
     },
-    onSuccess: async (activeUser) => {
+    onMutate: () => setActorProfileSwitching(true),
+    onSuccess: async ({ activeUser, profiles }) => {
       persistUser(activeUser);
       await resetAuthScopedQueries(queryClient);
+      queryClient.setQueryData(['actor-profiles'], profiles);
       setOpen(false);
       toast.success('Active profile updated.');
     },
-    onError: () => toast.error('Unable to activate this profile.'),
+    onError: (error) => toast.error(readableApiError(error, 'Unable to activate this profile.')),
+    onSettled: () => setActorProfileSwitching(false),
   });
+  // Keep profile activation available internally while the menu only shows account actions.
+  void switchableProfiles;
+  void activateProfileMutation;
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -71,11 +87,10 @@ export function ProfileMenu() {
             </div>
           </div>
           <div className="profile-separator" />
-          <button className="profile-item" type="button" role="menuitem">
+          <button className="profile-item" type="button" role="menuitem" disabled title="Profile page is not available yet.">
             <User size={14} />
             Profile
           </button>
-          {profilesQuery.data && profilesQuery.data.length > 1 ? <><div className="profile-separator" />{profilesQuery.data.map((profile) => <button className="profile-item" disabled={profile.isActive || activateProfileMutation.isPending} key={profile.id} onClick={() => activateProfileMutation.mutate(profile.id)} role="menuitem" type="button"><User size={14} />{profile.isActive ? `${profile.label} (active)` : profile.label}</button>)}</> : null}
           <button className="profile-item profile-item--danger" type="button" role="menuitem" onClick={() => logoutMutation.mutate(localStorage.getItem('accessToken'))} disabled={logoutMutation.isPending}>
             <LogOut size={14} />
             {logoutMutation.isPending ? 'Logging out...' : 'Logout'}
