@@ -14,7 +14,8 @@ type ApiResponse<T> = { success: boolean; message: string; data: T; timestamp: s
 type ProjectList = { items: Project[]; meta: { page: number; limit: number; total: number; totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean } };
 const projectPath = (id: string) => `/projects/${encodeURIComponent(id)}`;
 
-export function getProjects() { return apiClient<ApiResponse<ProjectList>>('/projects?page=1&limit=100').then((response) => response.data); }
+export function getProjects() { return getProjectsPage({ page: 1, limit: 100 }); }
+export function getProjectsPage({ page, limit }: { page: number; limit: number }) { return apiClient<ApiResponse<ProjectList>>(`/projects?page=${page}&limit=${limit}`).then((response) => response.data); }
 export function getProject(id: string) { return apiClient<ApiResponse<Project>>(projectPath(id)).then((response) => response.data); }
 export function getProjectCreationAvailableDocumentCodes() { return apiClient<ApiResponse<AvailableProjectDocumentCode[]>>('/projects/creation/available-document-codes').then((response) => response.data); }
 export function getProjectAvailableDocumentCodes(id: string) { return apiClient<ApiResponse<AvailableProjectDocumentCode[]>>(`${projectPath(id)}/documents/available-document-codes`).then((response) => response.data); }

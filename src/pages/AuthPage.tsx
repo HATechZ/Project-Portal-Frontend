@@ -83,7 +83,7 @@ function PasswordField({ label, value, onChange }: { label: string; value: strin
   );
 }
 
-function AuthBrand({ tenant = false, message }: { tenant?: boolean; message: string }) {
+function AuthBrand({ tenant = false, compactMessage = false, message }: { tenant?: boolean; compactMessage?: boolean; message: string }) {
   return (
     <div className="auth-brand-panel">
       <div>
@@ -102,7 +102,7 @@ function AuthBrand({ tenant = false, message }: { tenant?: boolean; message: str
             <p className="auth-brand-kicker">Workflow Management</p>
           </>
         )}
-        <p className="auth-brand-copy">{message}</p>
+        <p className={compactMessage ? 'auth-brand-copy auth-brand-copy--compact' : 'auth-brand-copy'}>{message}</p>
         {!tenant ? null : <p className="auth-brand-muted">Powered by Project Portal Workflow Management.</p>}
       </div>
       <div>
@@ -375,8 +375,10 @@ function LoginScreen({ showReference = false }: { showReference?: boolean }) {
       localStorage.setItem('accessToken', response.data.tokens.accessToken);
       localStorage.setItem('refreshToken', response.data.tokens.refreshToken);
       try {
-        const activeUser = await getCurrentUser();
-        const profiles = await getActorProfiles();
+        const [activeUser, profiles] = await Promise.all([
+          getCurrentUser(),
+          getActorProfiles(),
+        ]);
         return { response, activeUser, profiles };
       } catch (error) {
         clearAuthenticatedBrowserState();
@@ -431,7 +433,7 @@ function LoginScreen({ showReference = false }: { showReference?: boolean }) {
             <div className="auth-center-copy">Don't have a company account? <Link to="/company-signup">Create one</Link></div>
           </form>
         </div>
-        <AuthBrand message="Every drawing, submittal, and approval tracked, versioned, and auditable in one workspace." />
+        <AuthBrand compactMessage message="Every drawing, submittal, and approval tracked, versioned, and auditable in one workspace." />
       </div>
       {showReference ? (
         <FormStateCards

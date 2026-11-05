@@ -286,7 +286,11 @@ export type WorkRequestList = { items: WorkRequest[]; meta: { page: number; limi
 const requestPath = (id: string) => `/work-requests/${encodeURIComponent(id)}`;
 
 export function getWorkRequests() {
-  return apiClient<ApiResponse<WorkRequestList>>('/work-requests?page=1&limit=100').then((response) => response.data);
+  return getWorkRequestsPage({ page: 1, limit: 100 });
+}
+
+export function getWorkRequestsPage({ page, limit }: { page: number; limit: number }) {
+  return apiClient<ApiResponse<WorkRequestList>>(`/work-requests?page=${page}&limit=${limit}`).then((response) => response.data);
 }
 
 export function getWorkRequest(id: string) {

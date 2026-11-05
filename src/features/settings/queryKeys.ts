@@ -1,0 +1,23 @@
+// These keys intentionally preserve the existing cache contract.
+export const settingsQueryKeys = {
+  polCodes: ['pol-codes'] as const,
+  deactivatedPolCodes: ['pol-codes', 'deactivated'] as const,
+  podCodes: ['pod-codes'] as const,
+  deactivatedPodCodes: ['pod-codes', 'deactivated'] as const,
+  cargoCodes: ['cargo-codes'] as const,
+  deactivatedCargoCodes: ['cargo-codes', 'deactivated'] as const,
+  vesselCodes: ['vessel-codes'] as const,
+  deactivatedVesselCodes: ['vessel-codes', 'deactivated'] as const,
+  generalDocumentCodes: ['general-document-codes'] as const,
+  deactivatedGeneralDocumentCodes: ['general-document-codes', 'deactivated'] as const,
+  projectManagementOperationDocumentCodes: ['project-management-operation-document-codes'] as const,
+  deactivatedProjectManagementOperationDocumentCodes: ['project-management-operation-document-codes', 'deactivated'] as const,
+  marketingDocumentCodes: ['marketing-document-codes'] as const,
+  deactivatedMarketingDocumentCodes: ['marketing-document-codes', 'deactivated'] as const,
+  etcDocumentCodes: ['etc-document-codes'] as const,
+  deactivatedEtcDocumentCodes: ['etc-document-codes', 'deactivated'] as const,
+  engineeringDocumentCodes: ['engineering-document-codes'] as const,
+  deactivatedEngineeringDocumentCodes: ['engineering-document-codes', 'deactivated'] as const,
+  designations: ['designations'] as const,
+  accessRoles: ['access-roles'] as const,
+} as const;

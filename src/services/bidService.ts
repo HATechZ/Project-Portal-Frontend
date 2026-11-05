@@ -65,7 +65,11 @@ type PaginatedBids = { items: Bid[]; meta: { page: number; limit: number; total:
 const bidPath = (id: string) => `/bids/${encodeURIComponent(id)}`;
 
 export function getBids() {
-  return apiClient<ApiResponse<PaginatedBids>>('/bids?page=1&limit=100').then((response) => response.data);
+  return getBidsPage({ page: 1, limit: 100 });
+}
+
+export function getBidsPage({ page, limit }: { page: number; limit: number }) {
+  return apiClient<ApiResponse<PaginatedBids>>(`/bids?page=${page}&limit=${limit}`).then((response) => response.data);
 }
 
 export function getBid(id: string) {

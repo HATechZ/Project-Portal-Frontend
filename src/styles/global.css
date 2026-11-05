@@ -627,8 +627,8 @@ body {
 .settings-workspace-table .division-grid--head { background: #f8fafc; }
 .settings-table-filter { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .settings-table-filter > span { color: #516579; font-size: 11px; font-weight: 750; }
-.settings-table-filter input { width: 190px; height: 34px; border: 1px solid #dce5ed; border-radius: 8px; background: #fbfcfe; color: #344054; padding: 0 10px; font-size: 12px; }
-.settings-table-filter input:focus { outline: 0; border-color: #76b8c0; box-shadow: 0 0 0 3px rgba(11, 82, 98, .09); }
+.settings-table-filter input, .settings-table-filter select { width: 190px; height: 34px; border: 1px solid #dce5ed; border-radius: 8px; background: #fbfcfe; color: #344054; padding: 0 10px; font-size: 12px; }
+.settings-table-filter input:focus, .settings-table-filter select:focus { outline: 0; border-color: #76b8c0; box-shadow: 0 0 0 3px rgba(11, 82, 98, .09); }
 .settings-panel-filter { position: relative; }
 .settings-panel-filter > .settings-table-filter { position: absolute; z-index: 2; top: 13px; right: 18px; margin: 0; }
 .settings-panel-filter .dash-section-title > button,
@@ -1522,7 +1522,14 @@ th {
 }
 
 .team-members-modal {
-  width: min(640px, 100%);
+  width: min(880px, 100%);
+}
+
+.team-members-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(220px, 1fr);
+  align-items: start;
+  gap: 20px;
 }
 
 .team-modal-member-list {
@@ -1570,7 +1577,7 @@ th {
 .team-roster-table {
   overflow: hidden;
   border: 1px solid #d7e0e4;
-  border-radius: 3px;
+  border-radius: 6px;
 }
 
 .team-roster-table__head,
@@ -1651,12 +1658,15 @@ th {
 
 .team-members-add {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 10px;
-  border-top: 1px solid #d7e0e4;
-  padding-top: 12px;
+  gap: 12px;
+  border: 1px solid #d7e0e4;
+  border-radius: 6px;
+  background: #f6f9fa;
+  padding: 16px;
 }
+
+.team-members-add strong { color: #173d48; font-size: 13px; }
+.team-members-add p { margin: 4px 0 0; color: #607780; font-size: 11px; line-height: 1.5; }
 
 .team-members-add label {
   min-width: 0;
@@ -1672,6 +1682,13 @@ th {
   font-size: 10px;
   font-weight: 800;
   cursor: pointer;
+}
+
+.team-members-add button:disabled { cursor: not-allowed; opacity: 0.55; }
+
+@media (max-width: 700px) {
+  .team-members-layout { grid-template-columns: minmax(0, 1fr); }
+  .team-roster-table__head, .team-roster-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 30px; gap: 8px; }
 }
 
 .dash-page .team-dashboard .page-heading {
@@ -5348,6 +5365,10 @@ th {
   line-height: 1.5;
 }
 
+.auth-brand-copy--compact {
+  font-size: 16px;
+}
+
 .auth-brand-muted,
 .auth-brand-footer {
   max-width: 420px;
@@ -6060,3 +6081,53 @@ button:disabled:hover, button:disabled { cursor: not-allowed; }
   .division-modal.division-team-management-modal .team-dashboard .team-actions { flex-wrap: wrap; }
   .division-modal.division-team-management-modal .team-dashboard .team-actions button { flex: 1 1 calc(50% - 4px); }
 }
+
+/* Team roster dialog: keep its layout independent of the shared form grid. */
+.division-modal.team-members-modal { width: min(920px, calc(100vw - 48px)); max-width: none; border-radius: 12px; background: #fff; }
+.team-members-modal .division-modal__head { align-items: center; padding: 20px 24px; }
+.team-members-modal .division-modal__head strong { font-size: 18px; }
+.team-members-modal .team-members-content { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 24px; }
+.team-members-layout { grid-template-columns: minmax(0, 1.65fr) minmax(240px, 1fr); gap: 20px; }
+.team-members-modal .team-roster-table { min-width: 0; border-color: #e0e8eb; border-radius: 8px; }
+.team-members-modal .team-roster-table__head, .team-members-modal .team-roster-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 36px; gap: 12px; padding: 0 16px; }
+.team-members-modal .team-roster-table__head { min-height: 42px; background: #f4f7f8; color: #607780; font-family: inherit; font-size: 11px; letter-spacing: .03em; }
+.team-members-modal .team-roster-table__label { padding: 9px 16px; background: #f9fbfb; color: #527078; font-family: inherit; font-size: 11px; letter-spacing: .03em; }
+.team-roster-table__hint { margin-left: 8px; color: #71858b; font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none; }
+.team-members-modal .team-roster-row { min-height: 62px; padding-top: 10px; padding-bottom: 10px; }
+.team-members-modal .team-roster-row > span { min-width: 0; }
+.team-members-modal .team-roster-row strong, .team-members-modal .team-roster-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-members-modal .team-roster-row strong { font-size: 13px; }
+.team-members-modal .team-roster-row small { margin-top: 3px; color: #74858c; font-size: 11px; }
+.team-members-modal .team-roster-row > span:nth-child(2) { font-family: inherit; font-size: 12px; }
+.team-members-modal .team-roster-row button { width: 34px; height: 34px; border-color: transparent; border-radius: 7px; background: transparent; }
+.team-members-modal .team-roster-table__empty { padding: 16px; font-size: 12px; }
+.team-members-modal .team-members-add { gap: 16px; border-radius: 8px; padding: 20px; }
+.team-members-modal .team-members-add strong { font-size: 14px; }
+.team-members-modal .team-members-add p { font-size: 12px; }
+.team-members-modal .team-members-add button { width: 100%; height: 42px; border-radius: 6px; font-size: 12px; }
+.team-members-modal .division-form__actions { margin: 0; padding-top: 16px; }
+@media (max-width: 760px) {
+  .division-modal.team-members-modal { width: calc(100vw - 20px); }
+  .team-members-modal .team-members-content { padding: 16px; }
+  .team-members-modal .team-members-layout { grid-template-columns: minmax(0, 1fr); }
+  .team-members-modal .team-roster-table__head, .team-members-modal .team-roster-row { grid-template-columns: minmax(0, 1fr) minmax(0, .8fr) 34px; gap: 8px; padding-left: 12px; padding-right: 12px; }
+}
+
+.edit-member-form > label { grid-column: 1 / -1; }
+
+.division-form > .existing-member-selector { grid-column: 1 / -1; }
+.existing-member-selector { display: grid; gap: 7px; width: 100%; max-width: 100%; min-width: 0; }
+.existing-member-selector__label { color: #364b55; font-size: 12px; font-weight: 720; }
+.division-form .existing-member-selector .existing-member-selector__trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; max-width: 100%; min-width: 0; min-height: 42px; height: auto; border: 1px solid #d5e0e4; border-radius: 5px; background: #fff; color: #203b46; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 500; }
+.existing-member-selector__trigger > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.existing-member-selector__list { width: 100%; max-width: 100%; min-width: 0; max-height: min(280px, 35dvh); overflow-x: hidden; overflow-y: auto; border: 1px solid #d5e0e4; border-radius: 6px; background: #fff; }
+.division-form .existing-member-selector .existing-member-selector__option { display: grid; width: 100%; max-width: 100%; min-width: 0; height: auto; gap: 2px; border: 0; border-bottom: 1px solid #edf1f2; border-radius: 0; background: #fff; color: #203b46; padding: 7px 10px; text-align: left; font-weight: 400; }
+.division-form .existing-member-selector .existing-member-selector__option:hover:not(:disabled), .division-form .existing-member-selector .existing-member-selector__option:focus-visible { background: #edf7f7; outline: 2px solid #16808b; outline-offset: -2px; }
+.division-form .existing-member-selector .existing-member-selector__option:disabled { opacity: .65; cursor: not-allowed; }
+.existing-member-selector__option strong, .existing-member-selector__option small { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+.existing-member-selector__option small { color: #607780; font-size: 11px; }
+.existing-member-selector__heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }
+.existing-member-selector__badges { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.existing-member-selector__badges > span { max-width: 100%; border-radius: 4px; background: #e8f2f3; color: #285c64; padding: 1px 5px; font-size: 10px; line-height: 1.3; overflow-wrap: anywhere; white-space: normal; }
+.existing-member-selector__list > p { padding: 12px; }
+.existing-member-selector__division-lead { color: #a44508; font-weight: 700; }

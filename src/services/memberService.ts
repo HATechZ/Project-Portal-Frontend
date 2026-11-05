@@ -47,16 +47,22 @@ export type EligibleMember = {
   memberId: string;
   name: string;
   email: string;
-  activeTeamMemberships: Array<string | { id?: string; name?: string; code?: string }>;
+  activeTeamMemberships: Array<string | { id?: string; teamId?: string; name?: string; code?: string; isTeamLead?: boolean }>;
   isTeamLead: boolean;
-  ledTeams: Array<string | { id?: string; name?: string; code?: string }>;
+  ledTeams: Array<string | { id?: string; teamId?: string; name?: string; code?: string }>;
 };
 
 type ApiResponse<T> = { success: boolean; message: string; data: T; timestamp: string };
 type PaginatedResponse<T> = ApiResponse<{ items: T[]; meta: { page: number; limit: number; total: number; totalPages: number } }>;
 
 export function getMembers() {
-  return apiClient<PaginatedResponse<Member>>('/member?page=1&limit=100').then((response) => response.data);
+  return getMembersPage({ page: 1, limit: 100 });
+}
+
+export function getMembersPage({ page, limit, divisionId }: { page: number; limit: number; divisionId?: string }) {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (divisionId) params.set('divisionId', divisionId);
+  return apiClient<PaginatedResponse<Member>>(`/member?${params.toString()}`).then((response) => response.data);
 }
 
 export function getEligibleMembers(params: { divisionId?: string; teamId?: string }) {

@@ -63,7 +63,11 @@ function authHeaders() {
 }
 
 export function getDivisions() {
-  return apiClient<PaginatedResponse<Division>>('/division?page=1&limit=100', {
+  return getDivisionsPage({ page: 1, limit: 100 });
+}
+
+export function getDivisionsPage({ page, limit }: { page: number; limit: number }) {
+  return apiClient<PaginatedResponse<Division>>(`/division?page=${page}&limit=${limit}`, {
     headers: authHeaders(),
   }).then((response) => response.data);
 }

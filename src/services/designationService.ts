@@ -26,7 +26,11 @@ export type PaginatedDesignations = {
 const designationPath = (id: string) => `/designations/${encodeURIComponent(id)}`;
 
 export function getDesignations() {
-  return apiClient<ApiResponse<PaginatedDesignations>>('/designations?page=1&limit=100').then((response) => response.data);
+  return getDesignationsPage({ page: 1, limit: 100 });
+}
+
+export function getDesignationsPage({ page, limit }: { page: number; limit: number }) {
+  return apiClient<ApiResponse<PaginatedDesignations>>(`/designations?page=${page}&limit=${limit}`).then((response) => response.data);
 }
 
 export function getDesignation(id: string) {
