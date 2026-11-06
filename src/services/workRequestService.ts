@@ -119,13 +119,15 @@ export type WorkRequestRouteStep = {
   divisionName?: string | null;
   activatedAt: string | null;
   completedAt: string | null;
+  /** Server-owned lifecycle state for this route occurrence. */
+  status?: string | null;
 };
 
 export type WorkRequestRouteProjection = {
   routeVersionId: string | null;
   routeStepId: string | null;
   updatedAt: string;
-  divisionCycleId?: string | null;
+  divisionCycleId: string | null;
   teamStepId?: string | null;
   memberStepId?: string | null;
 };
@@ -399,14 +401,29 @@ function normalizeAvailableWorkflowActions(value: unknown): AvailableWorkflowAct
 
   if (!Array.isArray(records)) return [];
   return records.flatMap((item) => {
-    if (typeof item === 'string' && item) return [{ code: item, label: item, targetKind: '' }];
+    if (typeof item === 'string' && item) return [{ code: item, label: workflowActionLabel(item), targetKind: '' }];
     if (!item || typeof item !== 'object') return [];
-    const action = item as Partial<AvailableWorkflowAction> & { actionCode?: unknown; displayName?: unknown };
-    const code = typeof action.code === 'string' && action.code ? action.code : typeof action.actionCode === 'string' ? action.actionCode : null;
+    const action = item as Partial<AvailableWorkflowAction> & { actionCode?: unknown; action?: unknown; displayName?: unknown; name?: unknown };
+    const code = typeof action.code === 'string' && action.code
+      ? action.code
+      : typeof action.actionCode === 'string' && action.actionCode
+        ? action.actionCode
+        : typeof action.action === 'string' && action.action
+          ? action.action
+          : null;
     return code
-      ? [{ code, label: typeof action.label === 'string' && action.label ? action.label : typeof action.displayName === 'string' && action.displayName ? action.displayName : code, targetKind: typeof action.targetKind === 'string' ? action.targetKind : '' }]
+      ? [{ code, label: typeof action.label === 'string' && action.label ? action.label : typeof action.displayName === 'string' && action.displayName ? action.displayName : typeof action.name === 'string' && action.name ? action.name : workflowActionLabel(code), targetKind: typeof action.targetKind === 'string' ? action.targetKind : '' }]
       : [];
   });
+}
+
+/** Display text only. Availability and authorization remain entirely backend-owned. */
+function workflowActionLabel(code: string) {
+  const labels: Record<string, string> = {
+    DEFINE_TEAM_SEQUENCE: 'Define Team Sequence',
+    REQUEST_WORKFLOW_INFO: 'Request Information',
+  };
+  return labels[code] ?? code;
 }
 
 export function getWorkRequestRoute(id: string) {

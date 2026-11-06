@@ -18,20 +18,20 @@ export function WorkRequestHeader({ workRequest, actionArea, currentHandler }: W
         {parentType && parentReference ? <span>{parentType} · {compactReference(parentReference)}</span> : null}
       </div>
       <div className="work-request-header__content">
-        <div>
+        <div className="work-request-header__main">
           <div className="work-request-header__eyebrow"><PackageCheck size={15} /> Work Request</div>
           <div className="work-request-header__title"><h1>{workRequest.title}</h1><span className="work-request-state-badge">{apiLabel(workRequest.currentState)}</span></div>
           <div className="work-request-header__metadata">
-            {parentType && parentReference ? <span>{parentType}: {compactReference(parentReference)}</span> : <span>No parent reference</span>}
-            <span>Shipment: {workRequest.shipmentNumber || '—'}</span>
-            <span>Priority: {workRequest.priority}</span>
-            <span>Created by {labelFromRecord(workRequest.creator)}</span>
-            {currentHandler ? <span>Current: {currentHandler}</span> : null}
+            {parentType && parentReference ? <span className="work-request-header__metadata-item"><b>{parentType}</b><strong>{compactReference(parentReference)}</strong></span> : <span className="work-request-header__metadata-item"><strong>No parent reference</strong></span>}
+            <span className="work-request-header__metadata-item"><b>Shipment</b><strong>{workRequest.shipmentNumber || '—'}</strong></span>
+            <span className="work-request-header__metadata-item"><b>Priority</b><strong>{workRequest.priority}</strong></span>
+            <span className="work-request-header__metadata-item"><b>Created by</b><strong>{labelFromRecord(workRequest.creator)}</strong></span>
+            {currentHandler ? <span className="work-request-header__metadata-item work-request-header__metadata-item--current"><b>Current</b><strong>{currentHandler}</strong></span> : null}
           </div>
         </div>
         <div className="work-request-header__state">
-          {actionArea}
-          <small><CalendarClock size={14} /> Updated {formatDateTime(workRequest.updatedAt)}</small>
+          <div className="work-request-header__action-area">{actionArea}</div>
+          <small><CalendarClock size={14} />Updated <strong>{formatDateTime(workRequest.updatedAt)}</strong></small>
         </div>
       </div>
     </header>

@@ -17,12 +17,13 @@ import { isCurrentRequester } from '@/features/workRequests/recipientPresentatio
 import { readStoredUser } from '@/services/authSession';
 import { WorkRequestRevisionRegistry } from '@/features/workRequests/WorkRequestRevisionRegistry';
 import { WorkRequestWorkflowTracker } from '@/features/workRequests/WorkRequestWorkflowTracker';
+import { getWorkRequestWorkflowContext } from '@/features/workRequests/workflowContext';
 import { toWorkRequestWorkflowViewModel } from '@/features/workRequests/workflowViewModel';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { getDivisions } from '@/services/divisionService';
 import { ApiClientError, ApiNetworkError } from '@/services/apiClient';
 import { readableApiError } from '@/services/roleService';
-import { assignWorkRequestDivision, createWorkRequestInfoRequest, getWorkRequest, getWorkRequestAssignments, getWorkRequestAvailableActions, getWorkRequestAvailableDocumentCodes, getWorkRequestDocumentVersions, getWorkRequestDocuments, getWorkRequestEvents, getWorkRequestInfoRequestRecipients, getWorkRequestInfoRecipientStatus, getWorkRequestInfoRequests, getWorkRequestInternalHistory, getWorkRequestRoute, uploadWorkRequestDocuments, type WorkRequestDocumentUploadResponse } from '@/services/workRequestService';
+import { assignWorkRequestDivision, getWorkRequest, getWorkRequestAssignments, getWorkRequestAvailableActions, getWorkRequestAvailableDocumentCodes, getWorkRequestCommunicationRecipients, getWorkRequestDocumentVersions, getWorkRequestDocuments, getWorkRequestEvents, getWorkRequestInfoRequestRecipients, getWorkRequestInfoRecipientStatus, getWorkRequestInfoRequests, getWorkRequestInternalHistory, getWorkRequestRoute, sendWorkRequestRouteMessage, uploadWorkRequestDocuments, type WorkRequestDocumentUploadResponse } from '@/services/workRequestService';
 import { createRequestId } from '@/utils/requestId';
 import '@/features/workRequests/workRequestDetails.css';
 
@@ -35,17 +36,17 @@ export function WorkRequestDetailsPage() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [pendingDocuments, setPendingDocuments] = useState<PendingAttachment[]>([]);
   const [specialAction, setSpecialAction] = useState<'assign-division' | 'request-info' | 'modify-route' | null>(null);
-  const detailQuery = useQuery({ queryKey: ['work-request', id], queryFn: () => getWorkRequest(id!), enabled });
-  const routeQuery = useQuery({ queryKey: ['work-request', id, 'route'], queryFn: () => getWorkRequestRoute(id!), enabled });
+  const detailQuery = useQuery({ queryKey: ['work-request', id], queryFn: () => getWorkRequest(id!), enabled, refetchOnWindowFocus: false });
+  const routeQuery = useQuery({ queryKey: ['work-request', id, 'route'], queryFn: () => getWorkRequestRoute(id!), enabled, refetchOnWindowFocus: false });
   const internalHistoryQuery = useQuery({ queryKey: ['work-request', id, 'internal-history'], queryFn: () => getWorkRequestInternalHistory(id!), enabled });
   const divisionsQuery = useQuery({ queryKey: ['divisions'], queryFn: getDivisions, enabled });
   // Workflow availability is determined only by the backend for a Work Request
   // the active actor can open; no role or scope is reconstructed in the UI.
-  const actionsQuery = useQuery({ queryKey: ['work-request', id, 'available-actions', detailQuery.data?.updatedAt ?? null], queryFn: () => getWorkRequestAvailableActions(id!), enabled: detailQuery.isSuccess });
+  const actionsQuery = useQuery({ queryKey: ['work-request', id, 'available-actions'], queryFn: () => getWorkRequestAvailableActions(id!), enabled: detailQuery.isSuccess, refetchOnWindowFocus: false });
   const documentsQuery = useQuery({ queryKey: ['work-request', id, 'documents'], queryFn: () => getWorkRequestDocuments(id!), enabled });
   const documentCodesQuery = useQuery({ queryKey: ['work-request', id, 'available-document-codes'], queryFn: () => getWorkRequestAvailableDocumentCodes(id!), enabled: uploadOpen && enabled });
   const eventsQuery = useQuery({ queryKey: ['work-request', id, 'events', 1, 20], queryFn: () => getWorkRequestEvents(id!, 1, 20), enabled });
-  const assignmentsQuery = useQuery({ queryKey: ['work-request', id, 'assignments'], queryFn: () => getWorkRequestAssignments(id!), enabled });
+  const assignmentsQuery = useQuery({ queryKey: ['work-request', id, 'assignments'], queryFn: () => getWorkRequestAssignments(id!), enabled, refetchOnWindowFocus: false });
   const infoRequestsQuery = useQuery({ queryKey: ['work-request', id, 'info-requests'], queryFn: () => getWorkRequestInfoRequests(id!), enabled });
   const infoRecipientsQuery = useQuery({ queryKey: ['work-request', id, 'info-requests', 'recipients'], queryFn: () => getWorkRequestInfoRequestRecipients(id!), enabled });
   const infoRecipientStatusQuery = useQuery({ queryKey: ['work-request', id, 'info-requests', 'recipients', 'status'], queryFn: () => getWorkRequestInfoRecipientStatus(id!), enabled });
@@ -73,6 +74,7 @@ export function WorkRequestDetailsPage() {
 
   const versionsQuery = useQuery({ queryKey: ['work-request', id, 'documents', selectedDocumentId, 'versions'], queryFn: () => getWorkRequestDocumentVersions(id!, selectedDocumentId!), enabled: enabled && Boolean(selectedDocumentId) });
   const workflow = useMemo(() => detailQuery.data ? toWorkRequestWorkflowViewModel(detailQuery.data, routeQuery.data) : null, [detailQuery.data, routeQuery.data]);
+  const workflowContext = useMemo(() => getWorkRequestWorkflowContext({ route: routeQuery.data, assignments: assignmentsQuery.data, isRefreshing: routeQuery.isFetching || assignmentsQuery.isFetching, routeStatus: routeQuery.status }), [routeQuery.data, routeQuery.status, routeQuery.isFetching, assignmentsQuery.data, assignmentsQuery.isFetching]);
   const divisionNames = useMemo(() => new Map((divisionsQuery.data?.items ?? []).map((division) => [division.id, division.name])), [divisionsQuery.data]);
 
   if (!id) return <PageError title="Work Request not found" copy="The requested Work Request identifier is missing." onRetry={() => undefined} />;
@@ -103,9 +105,12 @@ export function WorkRequestDetailsPage() {
       queryClient.invalidateQueries({ queryKey: ['work-request', id, 'info-requests', 'recipients'] }),
       queryClient.invalidateQueries({ queryKey: ['work-request', id, 'communication-recipients'] }),
       queryClient.invalidateQueries({ queryKey: ['work-request', id, 'assignments'] }),
-      detailQuery.refetch(), routeQuery.refetch(), internalHistoryQuery.refetch(), actionsQuery.refetch(), documentsQuery.refetch(), versionsQuery.refetch(), eventsQuery.refetch(), assignmentsQuery.refetch(), infoRequestsQuery.refetch(),
+      queryClient.invalidateQueries({ queryKey: ['work-request', id, 'internal-cycle'] }),
     ]);
     await queryClient.prefetchQuery({ queryKey: ['work-request', id, 'info-requests', 'recipients'], queryFn: () => getWorkRequestInfoRequestRecipients(id) });
+  };
+  const refreshWorkflowContext = async () => {
+    await Promise.all([detailQuery.refetch(), routeQuery.refetch(), assignmentsQuery.refetch(), actionsQuery.refetch()]);
   };
   const assignDivisionAction = availableActions.find((action) => action.code === 'WR_ASSIGN_DIVISION') ?? null;
   const requestInfoAction = availableActions.find((action) => action.code === 'REQUEST_WORKFLOW_INFO') ?? null;
@@ -115,7 +120,7 @@ export function WorkRequestDetailsPage() {
     ? <WorkRequestActionsUnavailable onRetry={() => void actionsQuery.refetch()} />
     : actionsQuery.isLoading
       ? <WorkRequestActionsLoading />
-      : <><WorkRequestActionBar actions={standardActions} assignments={assignmentsQuery.data} documents={documents} onActionSuccess={refreshWorkflow} route={routeQuery.data} workRequestId={id} /><div className="work-request-header__actions">{assignDivisionAction ? <button onClick={() => setSpecialAction('assign-division')} type="button">Assign Division</button> : null}{requestInfoAction ? <button onClick={() => setSpecialAction('request-info')} type="button">Request Information</button> : null}{availableActions.some((action) => action.code === 'AMEND_ROUTE') ? <button onClick={() => setSpecialAction('modify-route')} type="button">Modify future route</button> : null}</div></>;
+      : <><WorkRequestActionBar actions={standardActions} documents={documents} onActionSuccess={refreshWorkflow} onContextRequired={refreshWorkflowContext} route={routeQuery.data} workflowContext={workflowContext} workRequestId={id} /><div className="work-request-header__actions">{assignDivisionAction ? <button className="work-request-action" onClick={() => setSpecialAction('assign-division')} type="button">Assign Division</button> : null}{requestInfoAction ? <button className="work-request-action" onClick={() => setSpecialAction('request-info')} type="button">Request Information</button> : null}{availableActions.some((action) => action.code === 'AMEND_ROUTE') ? <button className="work-request-action" onClick={() => setSpecialAction('modify-route')} type="button">Modify future route</button> : null}</div></>;
 
   const submitDocuments = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -164,19 +169,19 @@ function RequestInfoModal({ workRequestId, onClose, onSuccess }: { workRequestId
   const currentActorId = readStoredUser()?.activeActorProfileId;
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-  const recipientsQuery = useQuery({ queryKey: ['work-request', workRequestId, 'info-requests', 'recipients'], queryFn: () => getWorkRequestInfoRequestRecipients(workRequestId) });
+  const recipientsQuery = useQuery({ queryKey: ['work-request', workRequestId, 'communication-recipients'], queryFn: () => getWorkRequestCommunicationRecipients(workRequestId) });
   const codesQuery = useQuery({ queryKey: ['work-request', workRequestId, 'available-document-codes'], queryFn: () => getWorkRequestAvailableDocumentCodes(workRequestId) });
   const mutation = useMutation({
     mutationFn: async () => {
       const uploads = attachments.length ? await uploadWorkRequestDocuments(workRequestId, attachments, createRequestId()) : null;
       const documentVersionIds = uploads ? extractUploadedVersionIds(uploads.data) : [];
       if (attachments.length && documentVersionIds.length !== attachments.length) throw new Error('One or more attachments did not return a document version ID.');
-      return createWorkRequestInfoRequest(workRequestId, recipientId, message.trim(), documentVersionIds);
+      return sendWorkRequestRouteMessage(workRequestId, [recipientId], message.trim(), documentVersionIds);
     },
     onSuccess: async () => { toast.success('Information request sent.'); await onSuccess(); },
     onError: (reason) => toast.error(workRequestActionError(reason, 'Unable to send the information request.')),
   });
-  const recipients = recipientsQuery.data ?? [];
+  const recipients = (recipientsQuery.data ?? []).map((recipient) => ({ actorId: recipient.id, actorProfileId: recipient.id, label: recipient.label ?? recipient.name ?? recipient.email ?? recipient.id, displayName: recipient.name ?? recipient.label, email: recipient.email }));
   const codes = (codesQuery.data ?? []).map((code) => ({ id: code.id, code: code.code, name: code.name, family: '' }));
   const updateAttachment = (attachmentId: string, patch: Partial<PendingAttachment>) => setAttachments((items) => items.map((item) => item.id === attachmentId ? { ...item, ...patch } : item));
   const valid = !recipientsQuery.isError && Boolean(recipientId) && recipients.some((recipient) => recipient.actorId === recipientId && !isCurrentRequester(recipient, currentActorId)) && Boolean(message.trim()) && attachments.every((attachment) => attachment.documentCodeId && attachment.file);

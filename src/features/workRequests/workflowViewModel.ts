@@ -9,6 +9,7 @@ export type WorkflowRouteNode = {
   activatedAt: string | null;
   completedAt: string | null;
   isCurrent: boolean;
+  state: 'completed' | 'current' | 'upcoming';
 };
 
 export type WorkRequestWorkflowViewModel = {
@@ -19,10 +20,13 @@ export type WorkRequestWorkflowViewModel = {
 
 export function toWorkRequestWorkflowViewModel(workRequest: WorkRequest, route: WorkRequestRouteHistory | undefined): WorkRequestWorkflowViewModel {
   const currentStepId = route?.projection?.routeStepId ?? null;
-  const mainRouteNodes = (route?.steps ?? [])
+  const steps = (route?.steps ?? [])
     .slice()
-    .sort((left, right) => left.ordinal - right.ordinal)
-    .map((step) => toRouteNode(step, currentStepId));
+    .sort((left, right) => left.ordinal - right.ordinal);
+  // The projection is authoritative when present. A status fallback is only used
+  // for projections that have not yet supplied a route-step id.
+  const projectedCurrentId = currentStepId ?? steps.find((step) => isCurrentStatus(step.status))?.id ?? null;
+  const mainRouteNodes = steps.map((step) => toRouteNode(step, projectedCurrentId));
 
   return {
     workRequest,
@@ -32,6 +36,8 @@ export function toWorkRequestWorkflowViewModel(workRequest: WorkRequest, route: 
 }
 
 function toRouteNode(step: WorkRequestRouteStep, currentStepId: string | null): WorkflowRouteNode {
+  const completed = Boolean(step.completedAt) || isCompletedStatus(step.status);
+  const isCurrent = !completed && step.id === currentStepId;
   return {
     id: step.id,
     ordinal: step.ordinal,
@@ -40,6 +46,16 @@ function toRouteNode(step: WorkRequestRouteStep, currentStepId: string | null): 
     divisionName: step.divisionName ?? step.division?.name ?? null,
     activatedAt: step.activatedAt,
     completedAt: step.completedAt,
-    isCurrent: step.id === currentStepId,
+    isCurrent,
+    state: completed ? 'completed' : isCurrent ? 'current' : 'upcoming',
   };
+}
+
+function isCompletedStatus(status: string | null | undefined) {
+  return status?.toUpperCase() === 'COMPLETED';
+}
+
+function isCurrentStatus(status: string | null | undefined) {
+  const normalized = status?.toUpperCase();
+  return normalized === 'CURRENT' || normalized === 'ACTIVE';
 }
