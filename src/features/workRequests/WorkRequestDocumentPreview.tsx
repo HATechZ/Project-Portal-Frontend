@@ -1,16 +1,17 @@
-import { Download, FileText, Image as ImageIcon } from 'lucide-react';
+import { Download, FileText, Image as ImageIcon, X } from 'lucide-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { downloadDocumentVersion, downloadWorkRequestDocuments, previewDocumentVersion } from '@/services/workRequestService';
 import type { ApiRecord } from './documentData';
 import { documentId, documentLabel, documentMimeType, documentVersionId, versionLabel } from './documentData';
 
-type Props = { workRequestId: string; documents: ApiRecord[]; selectedDocumentId: string | null; onDocumentChange: (id: string) => void; onAdd: () => void; versions: ApiRecord[]; versionsLoading: boolean; error?: boolean };
+type Props = { workRequestId: string; documents: ApiRecord[]; selectedDocumentId: string | null; onDocumentChange: (id: string) => void; versions: ApiRecord[]; versionsLoading: boolean; error?: boolean };
 
-export function WorkRequestDocumentPreview({ workRequestId, documents, selectedDocumentId, onDocumentChange, onAdd, versions, versionsLoading, error }: Props) {
+export function WorkRequestDocumentPreview({ workRequestId, documents, selectedDocumentId, onDocumentChange, versions, versionsLoading, error }: Props) {
   const [selectedForDownload, setSelectedForDownload] = useState<string[]>([]);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const bulkRef = useRef<HTMLDetailsElement>(null);
   const selectedIndex = Math.max(0, documents.findIndex((document) => documentId(document) === selectedDocumentId));
   const selectedDocument = documents[selectedIndex] ?? null;
   const currentVersion = versions[0] ?? selectedDocument;
@@ -23,6 +24,24 @@ export function WorkRequestDocumentPreview({ workRequestId, documents, selectedD
   const availableSelectionIds = useMemo(() => [...versionByDocumentId.keys()], [versionByDocumentId]);
   useEffect(() => setSelectedForDownload((ids) => { const next = ids.filter((id) => versionByDocumentId.has(id)); return next.length === ids.length ? ids : next; }), [versionByDocumentId]);
   useEffect(() => {
+    const closeOnOutside = (event: PointerEvent) => {
+      if (bulkRef.current?.open && event.target instanceof Node && !bulkRef.current.contains(event.target)) bulkRef.current.open = false;
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && bulkRef.current?.open) {
+        bulkRef.current.open = false;
+        bulkRef.current.querySelector('summary')?.focus();
+      }
+    };
+    const closeOnFrameFocus = () => {
+      window.setTimeout(() => { if (document.activeElement instanceof HTMLIFrameElement && bulkRef.current) bulkRef.current.open = false; }, 0);
+    };
+    document.addEventListener('pointerdown', closeOnOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    window.addEventListener('blur', closeOnFrameFocus);
+    return () => { document.removeEventListener('pointerdown', closeOnOutside); document.removeEventListener('keydown', closeOnEscape); window.removeEventListener('blur', closeOnFrameFocus); };
+  }, []);
+  useEffect(() => {
     const nextUrl = previewQuery.data ? URL.createObjectURL(previewQuery.data.blob) : null;
     setObjectUrl(nextUrl);
     return () => { if (nextUrl) URL.revokeObjectURL(nextUrl); };
@@ -30,14 +49,14 @@ export function WorkRequestDocumentPreview({ workRequestId, documents, selectedD
 
   const singleDownload = useMutation({ mutationFn: () => downloadDocumentVersion(versionId!), onSuccess: (response) => triggerDownload(response.blob, response.filename ?? label), onError: () => toast.error('Unable to download this document. Please try again.') });
   const bulkDownload = useMutation({ mutationFn: (documentIds: string[]) => downloadWorkRequestDocuments(workRequestId, documentIds.map((id) => versionByDocumentId.get(id)).filter((id): id is string => Boolean(id))), onSuccess: (response) => triggerDownload(response.blob, response.filename ?? 'work-request-documents.zip'), onError: () => toast.error('Unable to create the document ZIP download. Please try again.') });
+  const startBulkDownload = (ids: string[]) => { bulkDownload.mutate(ids); if (bulkRef.current) bulkRef.current.open = false; };
   const toggle = (id: string) => setSelectedForDownload((ids) => ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]);
   const selectAt = (index: number) => { const id = documentId(documents[index]); if (id) onDocumentChange(id); };
   const busy = singleDownload.isPending || bulkDownload.isPending;
   const revision = versionLabel(currentVersion);
 
   return <section className="work-request-preview-card">
-    <header className="work-request-preview-card__toolbar"><span>Document Preview</span><button className="work-request-documents__add" onClick={onAdd} type="button">Add Document</button>{documents.length ? <div className="work-request-preview-card__controls"><select aria-label="Select document" onChange={(event) => onDocumentChange(event.target.value)} value={selectedDocumentId ?? ''}>{documents.map((document) => { const id = documentId(document); return id ? <option key={id} value={id}>{documentLabel(document)}</option> : null; })}</select><small>{selectedIndex + 1} / {documents.length}</small><button aria-label="Previous document" disabled={selectedIndex === 0} onClick={() => selectAt(selectedIndex - 1)} type="button">←</button><button aria-label="Next document" disabled={selectedIndex === documents.length - 1} onClick={() => selectAt(selectedIndex + 1)} type="button">→</button>{revision ? <em>{revision}</em> : null}{versionId ? <button aria-label={`Download ${label}`} className="work-request-preview-card__download" disabled={busy} onClick={() => singleDownload.mutate()} type="button"><Download size={14} /><b>{singleDownload.isPending ? 'Downloading…' : 'Download'}</b></button> : null}</div> : null}</header>
-    {documents.length > 1 ? <><div className="work-request-preview-card__download-toolbar"><span>{selectedForDownload.length} selected</span><button disabled={busy || !availableSelectionIds.length || selectedForDownload.length === availableSelectionIds.length} onClick={() => setSelectedForDownload(availableSelectionIds)} type="button">Select All</button><button disabled={busy || !selectedForDownload.length} onClick={() => setSelectedForDownload([])} type="button">Clear Selection</button><button disabled={busy || !selectedForDownload.length} onClick={() => bulkDownload.mutate(selectedForDownload)} type="button">{bulkDownload.isPending ? 'Preparing ZIP…' : 'Download Selected'}</button><button disabled={busy || !availableSelectionIds.length} onClick={() => bulkDownload.mutate([])} type="button">Download All</button></div><div aria-label="Documents available for download" className="work-request-preview-card__document-list">{documents.map((document) => { const id = documentId(document); const selectable = Boolean(id && versionByDocumentId.has(id)); return <label key={id ?? documentLabel(document)}><input checked={Boolean(id && selectedForDownload.includes(id))} disabled={!selectable || busy} onChange={() => id && toggle(id)} type="checkbox" /><span>{documentLabel(document)}</span>{!selectable ? <small>Version unavailable</small> : null}</label>; })}</div></> : null}
+    <header className="work-request-preview-card__toolbar"><span>Document Preview</span>{documents.length ? <div className="work-request-preview-card__controls"><select aria-label="Select document" onChange={(event) => onDocumentChange(event.target.value)} value={selectedDocumentId ?? ''}>{documents.map((document) => { const id = documentId(document); return id ? <option key={id} value={id}>{documentLabel(document)}</option> : null; })}</select><small>{selectedIndex + 1} / {documents.length}</small><button aria-label="Previous document" disabled={selectedIndex === 0} onClick={() => selectAt(selectedIndex - 1)} type="button">←</button><button aria-label="Next document" disabled={selectedIndex === documents.length - 1} onClick={() => selectAt(selectedIndex + 1)} type="button">→</button>{revision ? <em>{revision}</em> : null}{versionId ? <button aria-label={`Download ${label}`} className="work-request-preview-card__download" disabled={busy} onClick={() => singleDownload.mutate()} type="button"><Download size={14} /><b>{singleDownload.isPending ? 'Downloading…' : 'Download'}</b></button> : null}</div> : null}{documents.length > 1 ? <details className="work-request-preview-card__bulk" ref={bulkRef}><summary>Bulk download</summary><div className="work-request-preview-card__bulk-menu"><div className="work-request-preview-card__bulk-header"><strong>Bulk download</strong><button aria-label="Close bulk download" onClick={() => { if (bulkRef.current) { bulkRef.current.open = false; bulkRef.current.querySelector('summary')?.focus(); } }} type="button"><X size={16} /></button></div><div className="work-request-preview-card__download-toolbar"><span>{selectedForDownload.length} selected</span><button disabled={busy || !availableSelectionIds.length || selectedForDownload.length === availableSelectionIds.length} onClick={() => setSelectedForDownload(availableSelectionIds)} type="button">Select All</button><button disabled={busy || !selectedForDownload.length} onClick={() => setSelectedForDownload([])} type="button">Clear Selection</button><button disabled={busy || !selectedForDownload.length} onClick={() => startBulkDownload(selectedForDownload)} type="button">{bulkDownload.isPending ? 'Preparing ZIP…' : 'Download Selected'}</button><button disabled={busy || !availableSelectionIds.length} onClick={() => startBulkDownload([])} type="button">Download All</button></div><div aria-label="Documents available for download" className="work-request-preview-card__document-list">{documents.map((document) => { const id = documentId(document); const selectable = Boolean(id && versionByDocumentId.has(id)); return <label key={id ?? documentLabel(document)}><input checked={Boolean(id && selectedForDownload.includes(id))} disabled={!selectable || busy} onChange={() => id && toggle(id)} type="checkbox" /><span>{documentLabel(document)}</span>{!selectable ? <small>Version unavailable</small> : null}</label>; })}</div></div></details> : null}</header>
     {error ? <EmptyPreview title="Documents unavailable" copy="Documents could not be loaded." /> : !documents.length ? <EmptyPreview title="No documents available" copy="Upload a workflow document to preview it here." /> : versionsLoading ? <EmptyPreview title={label} copy="Loading document revision…" /> : !versionId ? <UnsupportedPreview label={label} mimeType={mimeType} copy="No document version is available for preview or download." /> : previewKind === 'pdf' && objectUrl ? <iframe className="work-request-preview-card__frame" src={objectUrl} title={label} /> : previewKind === 'image' && objectUrl ? <div className="work-request-preview-card__image"><img alt={label} src={objectUrl} /></div> : previewQuery.isLoading ? <EmptyPreview title={label} copy="Loading preview…" /> : previewQuery.isError ? <UnsupportedPreview label={label} mimeType={mimeType} copy="Preview unavailable. You can still download this file." /> : <UnsupportedPreview label={label} mimeType={mimeType} copy="This file type cannot be previewed in the browser. Use Download to open it locally." />}
   </section>;
 }

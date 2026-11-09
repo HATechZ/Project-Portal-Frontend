@@ -13,7 +13,8 @@ export type WorkflowActionCode =
   | 'WR_REQUEST_REVISION'
   | 'WR_FINAL_RELEASE'
   | 'REQUEST_WORKFLOW_INFO'
-  | 'RESPOND_WORKFLOW_INFO';
+  | 'RESPOND_WORKFLOW_INFO'
+  | 'RESPOND_TO_INFO_REQUEST';
 
 export type RouteWorkflowActionCode =
   | 'DEFINE_TEAM_SEQUENCE'
@@ -161,17 +162,20 @@ export type WorkRequestInternalCycle = {
 
 export type WorkRequestRouteRecipient = { id: string; label?: string; name?: string; email?: string };
 /** Backend-owned recipient target. Its identifier is returned by the recipients endpoint and is sent back unchanged. */
-export type WorkRequestInfoRequestRecipient = { actorId: string; actorProfileId: string; label?: string; displayName?: string; email?: string; canRespond?: boolean; [key: string]: unknown };
+/** Backend-authorized Request Info target. `actorId` is posted back unchanged as `targetActorId`. */
+export type WorkRequestInfoRequestRecipient = { actorId: string; actorProfileId?: string; label?: string; displayName?: string; memberId?: string | null; email?: string | null; divisionId?: string | null; divisionName?: string | null; designationId?: string | null; designationName?: string | null; teamIds?: string[]; teamNames?: string[]; relationshipContexts?: unknown[]; [key: string]: unknown };
 export type WorkRequestInfoRecipientStatus = {
   activeContacts: number;
   contactsWithActiveDefaultProfile: number;
   unavailableContacts: Array<{ contactId: string; displayName: string; email?: string; context?: { name?: string }; [key: string]: unknown }>;
 };
+export type WorkRequestInfoActor = { actorId: string; type?: string; displayName?: string; name?: string; email?: string | null; [key: string]: unknown };
+export type WorkRequestInfoAttachment = { documentVersionId: string; originalFileName?: string; fileName?: string; mimeType?: string; size?: number; [key: string]: unknown };
 export type WorkRequestInfoRequest = {
   id: string; message: string; status: string; requestedAt: string;
-  target: { actorId: string; type: string }; requester: { actorId: string; type: string };
-  attachments?: Array<{ documentVersionId: string }>;
-  responses?: Array<{ id: string; message: string; respondedAt: string; responder: { actorId: string; type: string }; attachments?: Array<{ documentVersionId: string }> }>;
+  target: WorkRequestInfoActor; requester: WorkRequestInfoActor;
+  attachments?: WorkRequestInfoAttachment[];
+  responses?: Array<{ id: string; message: string; respondedAt: string; responder: WorkRequestInfoActor; attachments?: WorkRequestInfoAttachment[] }>;
 };
 
 export type CreateWorkRequestInput = {

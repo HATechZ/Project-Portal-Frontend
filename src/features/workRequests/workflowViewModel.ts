@@ -43,7 +43,7 @@ function toRouteNode(step: WorkRequestRouteStep, currentStepId: string | null): 
     ordinal: step.ordinal,
     kind: step.kind,
     divisionId: step.divisionId ?? step.division?.id ?? null,
-    divisionName: step.divisionName ?? step.division?.name ?? null,
+    divisionName: step.divisionName?.trim() || step.division?.name?.trim() || null,
     activatedAt: step.activatedAt,
     completedAt: step.completedAt,
     isCurrent,
