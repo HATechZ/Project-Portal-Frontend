@@ -10,7 +10,7 @@ import { recipientPresentation } from './recipientPresentation';
 import { documentLabel, documentMimeType, documentVersionId, type ApiRecord } from './documentData';
 import { formatDateTime } from './workflowPresentation';
 
-type ReadState<T> = { data?: T; loading: boolean; error: boolean; retry: () => void };
+type ReadState<T> = { data?: T; loading: boolean; error: boolean; forbidden?: boolean; retry: () => void };
 const MAX_DOCUMENTS = 20;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const fileAccept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.dwg,.dxf,.jpg,.jpeg,.png,.zip';
@@ -113,7 +113,9 @@ export function WorkRequestInformationReads({ currentActorProfileId, documents, 
   return <div className="division-modal-backdrop" role="presentation"><section aria-labelledby="request-info-title" aria-modal="true" className="division-modal work-request-info-modal" role="dialog">
     <header className="work-request-info-modal__header"><h2 id="request-info-title">Request Information</h2><div className="work-request-info-card__actions"><details className="work-request-participant-picker" ref={participantPickerRef}><summary aria-label="Select person">{selectedPerson?.label ?? 'Select person'}</summary><div className="work-request-participant-picker__menu">{people.length ? people.map((person) => <button aria-pressed={person.actorId === selectedPersonId} key={person.actorId} onClick={() => { setSelectedPersonId(person.actorId); if (participantPickerRef.current) participantPickerRef.current.open = false; }} type="button"><strong>{person.label}</strong>{person.division || person.teams.length ? <span>{[person.division, ...person.teams].filter(Boolean).join(' · ')}</span> : null}{person.designation ? <span>{person.designation}</span> : null}</button>) : <span className="work-request-participant-picker__empty">{history.loading || recipients.loading ? 'Loading people…' : 'No people available'}</span>}</div></details><button aria-label="Close information request dialog" className="work-request-info-card__toggle" onClick={onClose} type="button"><X size={16} /></button></div></header>
     <div className="work-request-info-card__content">
-      {recipients.error ? <ReadError message="Eligible recipients could not be loaded." retry={recipients.retry} /> : null}
+      {history.forbidden ? <div className="work-request-side-card__empty" role="alert">You do not have access to this Request Information history.</div> : history.error ? <ReadError message="Request Information history could not be loaded." retry={history.retry} /> : null}
+      {recipients.forbidden ? <div className="work-request-side-card__empty" role="alert">You do not have access to eligible recipients.</div> : recipients.error ? <ReadError message="Eligible recipients could not be loaded." retry={recipients.retry} /> : null}
+      {!history.loading && !history.error && history.data?.length === 0 ? <div className="work-request-side-card__empty">No previous Request Information history.</div> : null}
       <div className="work-request-read-content work-request-chat">
         {history.loading ? <span>Loading history...</span> : !selectedPersonId ? <div className="work-request-side-card__empty">Select a person to view information requests.</div> : <>{selectedPerson ? <div className="work-request-chat-person"><strong>{selectedPerson.label}</strong>{selectedPerson.division ? <span className="work-request-chat-person__division">{selectedPerson.division}</span> : null}{selectedPerson.teams.length || selectedPerson.designation ? <span>{[...selectedPerson.teams, selectedPerson.designation].filter(Boolean).join(' · ')}</span> : null}</div> : null}<div className="work-request-chat__messages" ref={messageAreaRef}>{messages.length ? messages.map((entry) => {
           if (entry.kind === 'request') {

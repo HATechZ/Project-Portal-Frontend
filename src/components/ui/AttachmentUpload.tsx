@@ -7,7 +7,7 @@ export type { PendingAttachment } from './attachmentDraft';
 export type AttachmentDocumentCode = { id: string; name: string; code?: string; family?: string };
 export type AttachmentMetadataMode = 'document-code' | 'document-metadata';
 
-export function AttachmentUpload({ attachments, codes, disabled = false, onAdd, onDocumentCodeChange, onRemove, onMetadataChange, metadataMode = 'document-code', maxFiles, maxFileBytes, accept, onValidationError }: {
+export function AttachmentUpload({ attachments, codes, disabled = false, onAdd, onDocumentCodeChange, onRemove, onMetadataChange, metadataMode = 'document-code', maxFiles, maxFileBytes, accept, onValidationError, lockedAttachmentIds = [] }: {
   attachments: PendingAttachment[];
   codes: AttachmentDocumentCode[];
   disabled?: boolean;
@@ -20,6 +20,7 @@ export function AttachmentUpload({ attachments, codes, disabled = false, onAdd, 
   maxFileBytes?: number;
   accept?: string;
   onValidationError?: (message: string) => void;
+  lockedAttachmentIds?: string[];
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -53,10 +54,11 @@ export function AttachmentUpload({ attachments, codes, disabled = false, onAdd, 
       <input accept={accept} disabled={disabled || (maxFiles !== undefined && attachments.length >= maxFiles)} multiple onChange={(event) => { if (event.target.files?.length) addFiles(event.target.files); event.target.value = ''; }} ref={inputRef} type="file" />
     </div>
     {attachments.length ? <div className="attachment-table-wrap"><table className="attachment-table attachment-table--shared"><thead><tr><th>File Name</th><th>Description</th><th>Document Code</th><th>Ship. No</th><th>Last Update</th><th>Action</th></tr></thead><tbody>{attachments.map((attachment) => {
-      const documentCode = <select aria-label={`Document code for ${attachment.file.name}`} disabled={disabled} onChange={(event) => onDocumentCodeChange(attachment.id, event.target.value)} required value={attachment.documentCodeId}><option value="">Select document code</option>{codes.map((code) => <option key={code.id} value={code.id}>{code.family ? `[${code.family}] ${code.code} — ${code.name}` : code.code ? `${code.code} — ${code.name}` : code.name}</option>)}</select>;
+      const metadataDisabled = disabled || lockedAttachmentIds.includes(attachment.id);
+      const documentCode = <select aria-label={`Document code for ${attachment.file.name}`} disabled={metadataDisabled} onChange={(event) => onDocumentCodeChange(attachment.id, event.target.value)} required value={attachment.documentCodeId}><option value="">Select document code</option>{codes.map((code) => <option key={code.id} value={code.id}>{code.family ? `[${code.family}] ${code.code} — ${code.name}` : code.code ? `${code.code} — ${code.name}` : code.name}</option>)}</select>;
       const fileName = <><strong><FileText aria-hidden="true" size={15} />{attachment.file.name}</strong><small>{formatFileSize(attachment.file.size)}</small></>;
       const remove = <button aria-label={`Remove ${attachment.file.name}`} className="attachment-table__remove" disabled={disabled} onClick={() => onRemove(attachment.id)} title="Remove file" type="button"><Trash2 aria-hidden="true" size={16} /></button>;
-      return <tr key={attachment.id}><td>{fileName}</td><td>{supportsDocumentMetadata ? <input aria-label={`Description for ${attachment.file.name}`} disabled={disabled} maxLength={10000} onChange={(event) => onMetadataChange?.(attachment.id, 'description', event.target.value)} placeholder="Add description" value={attachment.description ?? ''} /> : <span className="attachment-table__unavailable" title="Description is not supported for this upload">—</span>}</td><td>{documentCode}</td><td>{supportsDocumentMetadata ? <input aria-label={`Shipment number for ${attachment.file.name}`} disabled={disabled} maxLength={10} onChange={(event) => onMetadataChange?.(attachment.id, 'shipmentNumber', event.target.value)} placeholder="e.g. 01" value={attachment.shipmentNumber ?? ''} /> : <span className="attachment-table__unavailable" title="Shipments are not supported for this upload">—</span>}</td><td><span className="attachment-table__draft-time" title="Local draft timestamp; the server timestamp replaces it after upload">{formatAddedAt(attachment.addedAt)}<small>Draft</small></span></td><td>{remove}</td></tr>;
+      return <tr key={attachment.id}><td>{fileName}</td><td>{supportsDocumentMetadata ? <input aria-label={`Description for ${attachment.file.name}`} disabled={metadataDisabled} maxLength={10000} onChange={(event) => onMetadataChange?.(attachment.id, 'description', event.target.value)} placeholder="Add description" value={attachment.description ?? ''} /> : <span className="attachment-table__unavailable" title="Description is not supported for this upload">—</span>}</td><td>{documentCode}</td><td>{supportsDocumentMetadata ? <input aria-label={`Shipment number for ${attachment.file.name}`} disabled={metadataDisabled} maxLength={10} onChange={(event) => onMetadataChange?.(attachment.id, 'shipmentNumber', event.target.value)} placeholder="e.g. 01" value={attachment.shipmentNumber ?? ''} /> : <span className="attachment-table__unavailable" title="Shipments are not supported for this upload">—</span>}</td><td><span className="attachment-table__draft-time" title="Local draft timestamp; the server timestamp replaces it after upload">{formatAddedAt(attachment.addedAt)}<small>Draft</small></span></td><td>{remove}</td></tr>;
     })}</tbody></table></div> : null}
   </section>;
 }

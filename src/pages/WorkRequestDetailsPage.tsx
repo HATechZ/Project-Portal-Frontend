@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, X } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { AttachmentUpload } from '@/components/ui/AttachmentUpload';
 import { WorkspaceLoadingState } from '@/components/ui/LoadingState';
-import { createPendingAttachment, type PendingAttachment } from '@/components/ui/attachmentDraft';
+import { type PendingAttachment } from '@/components/ui/attachmentDraft';
+import { WorkRequestDocumentUploadModal } from '@/features/workRequests/WorkRequestDocumentUploadModal';
 import { WorkRequestActionBar } from '@/features/workRequests/WorkRequestActionBar';
 import { WorkRequestAuditTrail } from '@/features/workRequests/WorkRequestAuditTrail';
 import { documentId, recordList } from '@/features/workRequests/documentData';
@@ -17,8 +17,8 @@ import { WorkRequestWorkflowTracker } from '@/features/workRequests/WorkRequestW
 import { getWorkRequestWorkflowContext } from '@/features/workRequests/workflowContext';
 import { toWorkRequestWorkflowViewModel } from '@/features/workRequests/workflowViewModel';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { usePermissions } from '@/hooks/usePermissions';
 import { getDivisions } from '@/services/divisionService';
-import { readStoredUser } from '@/services/authSession';
 import { ApiClientError, ApiNetworkError } from '@/services/apiClient';
 import { readableApiError } from '@/services/roleService';
 import { assignWorkRequestDivision, getWorkRequest, getWorkRequestAssignments, getWorkRequestAvailableActions, getWorkRequestAvailableDocumentCodes, getWorkRequestDocumentVersions, getWorkRequestDocuments, getWorkRequestEvents, getWorkRequestInfoRequestRecipients, getWorkRequestInfoRequests, getWorkRequestInternalHistory, getWorkRequestRoute, uploadWorkRequestDocuments } from '@/services/workRequestService';
@@ -27,26 +27,36 @@ import '@/features/workRequests/workRequestDetails.css';
 
 export function WorkRequestDetailsPage() {
   usePageTitle('Work Request Details');
+  const { user } = usePermissions();
   const { id } = useParams<{ id: string }>();
+  const workRequestId = id ?? '';
   const queryClient = useQueryClient();
-  const enabled = Boolean(id);
+  const enabled = Boolean(workRequestId);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [pendingDocuments, setPendingDocuments] = useState<PendingAttachment[]>([]);
   const [specialAction, setSpecialAction] = useState<'assign-division' | 'request-info' | 'modify-route' | null>(null);
-  const currentActorProfileId = readStoredUser()?.activeActorProfileId ?? null;
+  const currentActorProfileId = typeof user?.activeActorProfileId === 'string' ? user.activeActorProfileId : null;
   const detailQuery = useQuery({ queryKey: ['work-request', id], queryFn: () => getWorkRequest(id!), enabled, refetchOnWindowFocus: false });
   const routeQuery = useQuery({ queryKey: ['work-request', id, 'route'], queryFn: () => getWorkRequestRoute(id!), enabled, refetchOnWindowFocus: false });
   const internalHistoryQuery = useQuery({ queryKey: ['work-request', id, 'internal-history'], queryFn: () => getWorkRequestInternalHistory(id!), enabled });
   // Workflow availability is determined only by the backend for a Work Request
   // the active actor can open; no role or scope is reconstructed in the UI.
-  const actionsQuery = useQuery({ queryKey: ['work-request', id, 'available-actions'], queryFn: () => getWorkRequestAvailableActions(id!), enabled: detailQuery.isSuccess, refetchOnWindowFocus: false });
+  // The backend resolves workflow actions for the active ActorProfile. Include
+  // that profile in the cache key so a Team Member never sees a prior profile's
+  // cached action list after an actor switch.
+  const actionsQueryKey = useMemo(() => ['work-request', workRequestId, 'available-actions', currentActorProfileId ?? 'current-session'] as const, [currentActorProfileId, workRequestId]);
+  // This is the sole source for workflow buttons. It deliberately starts as
+  // soon as the route provides an id; it does not wait for any other query.
+  const actionsQuery = useQuery({ queryKey: actionsQueryKey, queryFn: () => getWorkRequestAvailableActions(workRequestId), enabled: Boolean(workRequestId), refetchOnMount: 'always', refetchOnWindowFocus: false, staleTime: 0 });
   const documentsQuery = useQuery({ queryKey: ['work-request', id, 'documents'], queryFn: () => getWorkRequestDocuments(id!), enabled });
   const documentCodesQuery = useQuery({ queryKey: ['work-request', id, 'available-document-codes'], queryFn: () => getWorkRequestAvailableDocumentCodes(id!), enabled: uploadOpen && enabled });
   const eventsQuery = useQuery({ queryKey: ['work-request', id, 'events', 1, 20], queryFn: () => getWorkRequestEvents(id!, 1, 20), enabled });
   const assignmentsQuery = useQuery({ queryKey: ['work-request', id, 'assignments'], queryFn: () => getWorkRequestAssignments(id!), enabled, refetchOnWindowFocus: false });
-  const infoRequestsQuery = useQuery({ queryKey: ['work-request', id, 'info-requests'], queryFn: () => getWorkRequestInfoRequests(id!), enabled });
-  const infoRecipientsQuery = useQuery({ queryKey: ['work-request', id, 'info-requests', 'recipients'], queryFn: () => getWorkRequestInfoRequestRecipients(id!), enabled });
+  const infoRequestsQuery = useQuery({ queryKey: ['work-request', id, 'info-requests'], queryFn: () => getWorkRequestInfoRequests(id!), enabled: enabled && specialAction === 'request-info', retry: (count, error) => !(error instanceof ApiClientError && error.status === 403) && count < 3 });
+  const infoRecipientsQuery = useQuery({ queryKey: ['work-request', id, 'info-requests', 'recipients'], queryFn: () => getWorkRequestInfoRequestRecipients(id!), enabled: enabled && specialAction === 'request-info', retry: (count, error) => !(error instanceof ApiClientError && error.status === 403) && count < 3 });
+  const availableActions = useMemo(() => actionsQuery.data ?? [], [actionsQuery.data]);
+  const standardActions = useMemo(() => availableActions.filter((action) => action.code !== 'WR_ASSIGN_DIVISION' && action.code !== 'REQUEST_WORKFLOW_INFO' && action.code !== 'AMEND_ROUTE'), [availableActions]);
   const documents = recordList(documentsQuery.data, ['items', 'documents']);
   const documentCodes = (documentCodesQuery.data ?? []).map((code) => ({ id: code.id, code: code.code, name: code.name, family: '' }));
   const documentCodesLoading = documentCodesQuery.isLoading;
@@ -77,7 +87,6 @@ export function WorkRequestDetailsPage() {
   if (detailQuery.isLoading) return <WorkspaceLoadingState entity="Work Request" />;
   if (detailQuery.isError || !detailQuery.data) return <PageError title="Unable to load Work Request" copy="This Work Request may not exist or is no longer available." onRetry={() => void detailQuery.refetch()} />;
 
-  const availableActions = actionsQuery.data ?? [];
   const versions = recordList(versionsQuery.data, ['items', 'versions']);
   const events = eventsQuery.data?.items ?? [];
   const currentDivision = workflow?.currentRouteOccurrence?.divisionName ?? null;
@@ -103,20 +112,17 @@ export function WorkRequestDetailsPage() {
       queryClient.invalidateQueries({ queryKey: ['work-request', id, 'assignments'] }),
       queryClient.invalidateQueries({ queryKey: ['work-request', id, 'internal-cycle'] }),
     ]);
-    await queryClient.prefetchQuery({ queryKey: ['work-request', id, 'info-requests', 'recipients'], queryFn: () => getWorkRequestInfoRequestRecipients(id) });
   };
   const refreshWorkflowContext = async () => {
     await Promise.all([detailQuery.refetch(), routeQuery.refetch(), assignmentsQuery.refetch(), actionsQuery.refetch()]);
   };
   const assignDivisionAction = availableActions.find((action) => action.code === 'WR_ASSIGN_DIVISION') ?? null;
   const requestInfoAction = availableActions.find((action) => action.code === 'REQUEST_WORKFLOW_INFO') ?? null;
-  const standardActions = availableActions
-    .filter((action) => action.code !== 'WR_ASSIGN_DIVISION' && action.code !== 'REQUEST_WORKFLOW_INFO' && action.code !== 'AMEND_ROUTE');
   const actionArea = actionsQuery.isError
     ? <WorkRequestActionsUnavailable onRetry={() => void actionsQuery.refetch()} />
     : actionsQuery.isLoading
       ? <WorkRequestActionsLoading />
-      : <><WorkRequestActionBar actions={standardActions} documents={documents} onActionSuccess={refreshWorkflow} onContextRequired={refreshWorkflowContext} route={routeQuery.data} workflowContext={workflowContext} workRequestId={id} /><div className="work-request-header__actions">{assignDivisionAction ? <button className="work-request-action" onClick={() => setSpecialAction('assign-division')} type="button">Assign Division</button> : null}{(requestInfoAction || (!infoRecipientsQuery.isError && (infoRecipientsQuery.data?.length ?? 0) > 0) || (currentActorProfileId && infoRequestsQuery.data?.some((request) => request.requester.actorId === currentActorProfileId || request.target.actorId === currentActorProfileId))) ? <button className="work-request-action" onClick={() => setSpecialAction('request-info')} type="button">Request Information</button> : null}{availableActions.some((action) => action.code === 'AMEND_ROUTE') ? <button className="work-request-action" onClick={() => setSpecialAction('modify-route')} type="button">Modify future route</button> : null}</div></>;
+      : <><WorkRequestActionBar actions={standardActions} documents={documents} onActionSuccess={refreshWorkflow} onContextRequired={refreshWorkflowContext} route={routeQuery.data} workflowContext={workflowContext} workRequestId={workRequestId} /><div className="work-request-header__actions">{assignDivisionAction ? <button className="work-request-action" onClick={() => setSpecialAction('assign-division')} type="button">Assign Division</button> : null}{requestInfoAction ? <button className="work-request-action" onClick={() => setSpecialAction('request-info')} type="button">Request Information</button> : null}{availableActions.some((action) => action.code === 'AMEND_ROUTE') ? <button className="work-request-action" onClick={() => setSpecialAction('modify-route')} type="button">Modify future route</button> : null}</div></>;
 
   const submitDocuments = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -134,17 +140,7 @@ export function WorkRequestDetailsPage() {
       <div className="work-request-page__main"><WorkRequestDocumentPreview documents={documents} error={documentsQuery.isError} onDocumentChange={setSelectedDocumentId} selectedDocumentId={selectedDocumentId} versions={versions} versionsLoading={versionsQuery.isLoading} workRequestId={id} /></div>
       <aside className="work-request-page__aside"><WorkRequestRevisionRegistry error={internalHistoryQuery.isError} events={internalHistoryEvents} loading={internalHistoryQuery.isLoading} /><WorkRequestAuditTrail error={eventsQuery.isError} events={events} loading={eventsQuery.isLoading} /></aside>
     </div>
-  </div>{uploadOpen ? <WorkRequestDocumentUploadModal attachments={pendingDocuments} codes={documentCodes} codesError={documentCodesError} codesLoading={documentCodesLoading} onChange={setPendingDocuments} onClose={() => { if (!uploadMutation.isPending) { setUploadOpen(false); setPendingDocuments([]); } }} onSubmit={submitDocuments} saving={uploadMutation.isPending} /> : null}{specialAction === 'assign-division' ? <AssignDivisionModal workRequestId={id} onClose={() => setSpecialAction(null)} onSuccess={async () => { await refreshWorkflow(); setSpecialAction(null); }} /> : null}{specialAction === 'modify-route' ? <div className="division-modal-backdrop" role="presentation"><section aria-labelledby="modify-route-title" aria-modal="true" className="division-modal work-request-action-dialog" role="dialog"><div className="division-modal__head"><strong id="modify-route-title">Modify future route</strong><button aria-label="Close" onClick={() => setSpecialAction(null)} type="button">X</button></div><div className="division-form"><p>Future route editing is not yet available in this interface.</p><div className="division-form__actions"><button onClick={() => setSpecialAction(null)} type="button">Close</button></div></div></section></div> : null}{specialAction === 'request-info' ? <WorkRequestInformationReads currentActorProfileId={currentActorProfileId} documents={documents} history={{ data: infoRequestsQuery.data, loading: infoRequestsQuery.isLoading, error: infoRequestsQuery.isError, retry: () => { void infoRequestsQuery.refetch(); } }} onClose={() => setSpecialAction(null)} onReplySuccess={refreshWorkflow} recipients={{ data: infoRecipientsQuery.data, loading: infoRecipientsQuery.isLoading, error: infoRecipientsQuery.isError, retry: () => { void infoRecipientsQuery.refetch(); } }} workRequestId={id} /> : null}</>;
-}
-
-const MAX_DOCUMENTS = 20;
-const MAX_FILE_BYTES = 25 * 1024 * 1024;
-const fileAccept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.dwg,.dxf,.jpg,.jpeg,.png,.zip';
-type DocumentCodeOption = { id: string; code: string; name: string; family: string };
-
-function WorkRequestDocumentUploadModal({ attachments, codes, codesError, codesLoading, onChange, onClose, onSubmit, saving }: { attachments: PendingAttachment[]; codes: DocumentCodeOption[]; codesError: boolean; codesLoading: boolean; onChange: (attachments: PendingAttachment[]) => void; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; saving: boolean }) {
-  const update = (id: string, patch: Partial<PendingAttachment>) => onChange(attachments.map((attachment) => attachment.id === id ? { ...attachment, ...patch } : attachment));
-  return <div className="division-modal-backdrop"><section aria-modal="true" className="division-modal division-modal--wide work-request-document-modal" role="dialog"><div className="division-modal__head"><div><strong>Add Documents</strong><span>Attach and classify supporting files.</span></div><button aria-label="Close" disabled={saving} onClick={onClose} type="button"><X aria-hidden="true" size={17} /></button></div><form className="division-form" onSubmit={onSubmit}>{codesError ? <p>Document Codes are unavailable. Try again before adding documents.</p> : <AttachmentUpload accept={fileAccept} attachments={attachments} codes={codes} disabled={saving || codesLoading} maxFileBytes={MAX_FILE_BYTES} maxFiles={MAX_DOCUMENTS} metadataMode="document-metadata" onAdd={(files) => onChange([...attachments, ...files.map((file) => ({ ...createPendingAttachment(file), description: '', shipmentNumber: '' }))])} onDocumentCodeChange={(id, documentCodeId) => update(id, { documentCodeId })} onMetadataChange={(id, field, value) => update(id, { [field]: value })} onRemove={(id) => onChange(attachments.filter((attachment) => attachment.id !== id))} onValidationError={(message) => toast.error(message)} />}<div className="division-form__actions"><button disabled={saving} onClick={onClose} type="button">Cancel</button><button disabled={saving || codesLoading || codesError || !attachments.length} type="submit">{saving ? 'Uploading...' : 'Upload Documents'}</button></div></form></section></div>;
+  </div>{uploadOpen ? <WorkRequestDocumentUploadModal attachments={pendingDocuments} codes={documentCodes} codesError={documentCodesError} codesLoading={documentCodesLoading} onChange={setPendingDocuments} onClose={() => { if (!uploadMutation.isPending) { setUploadOpen(false); setPendingDocuments([]); } }} onSubmit={submitDocuments} saving={uploadMutation.isPending} /> : null}{specialAction === 'assign-division' ? <AssignDivisionModal workRequestId={id} onClose={() => setSpecialAction(null)} onSuccess={async () => { await refreshWorkflow(); setSpecialAction(null); }} /> : null}{specialAction === 'modify-route' ? <div className="division-modal-backdrop" role="presentation"><section aria-labelledby="modify-route-title" aria-modal="true" className="division-modal work-request-action-dialog" role="dialog"><div className="division-modal__head"><strong id="modify-route-title">Modify future route</strong><button aria-label="Close" onClick={() => setSpecialAction(null)} type="button">X</button></div><div className="division-form"><p>Future route editing is not yet available in this interface.</p><div className="division-form__actions"><button onClick={() => setSpecialAction(null)} type="button">Close</button></div></div></section></div> : null}{specialAction === 'request-info' ? <WorkRequestInformationReads currentActorProfileId={currentActorProfileId} documents={documents} history={{ data: infoRequestsQuery.data, loading: infoRequestsQuery.isLoading, error: infoRequestsQuery.isError, forbidden: infoRequestsQuery.error instanceof ApiClientError && infoRequestsQuery.error.status === 403, retry: () => { void infoRequestsQuery.refetch(); } }} onClose={() => setSpecialAction(null)} onReplySuccess={refreshWorkflow} recipients={{ data: infoRecipientsQuery.data, loading: infoRecipientsQuery.isLoading, error: infoRecipientsQuery.isError, forbidden: infoRecipientsQuery.error instanceof ApiClientError && infoRecipientsQuery.error.status === 403, retry: () => { void infoRecipientsQuery.refetch(); } }} workRequestId={id} /> : null}</>;
 }
 
 function AssignDivisionModal({ workRequestId, onClose, onSuccess }: { workRequestId: string; onClose: () => void; onSuccess: () => Promise<void> }) {

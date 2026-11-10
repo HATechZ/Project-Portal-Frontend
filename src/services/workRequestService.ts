@@ -207,7 +207,7 @@ export type CreateWorkRequestDocumentResponse = {
 export type WorkRequestDocumentUploadResponse = {
   documentId: string;
   owner: unknown;
-  documentCode: string | null;
+  documentCode: string | { id: string; code: string; name: string } | null;
   originalFileName: string;
   description: string | null;
   shipmentNumber: string | null;
@@ -454,8 +454,8 @@ export function appendWorkRequestMemberStep(id: string, teamStepId: string, memb
   return apiClient<ApiResponse<WorkRequestInternalCycle>>(`${requestPath(id)}/team-steps/${encodeURIComponent(teamStepId)}/member-steps`, { method: 'POST', body: JSON.stringify({ memberId }) }).then((response) => response.data);
 }
 
-export function submitWorkRequestMemberStep(id: string, memberStepId: string) {
-  return apiClient<ApiResponse<WorkRequestInternalCycle>>(`${requestPath(id)}/member-steps/${encodeURIComponent(memberStepId)}/submit`, { method: 'POST' }).then((response) => response.data);
+export function submitWorkRequestMemberStep(id: string, memberStepId: string, payload?: { message?: string; documentVersionIds?: string[] }) {
+  return apiClient<ApiResponse<WorkRequestInternalCycle>>(`${requestPath(id)}/member-steps/${encodeURIComponent(memberStepId)}/submit`, { method: 'POST', ...(payload ? { body: JSON.stringify(payload) } : {}) }).then((response) => response.data);
 }
 
 export function completeWorkRequestTeamStep(id: string, teamStepId: string) {
