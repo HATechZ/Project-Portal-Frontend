@@ -152,12 +152,25 @@ export type WorkRequestRouteHistory = {
 export type WorkRequestInternalCycle = {
   id: string;
   routeStep: { divisionId: string | null };
+  internalWorkflow: InternalWorkflowProjection | null;
+  workflowVisibility: { canViewMainWorkflow: boolean; canViewInternalWorkflow: boolean };
   teamSteps: Array<{
     id: string;
     team: { id: string; name: string; leadMemberId: string | null };
     memberSteps: Array<{ id: string; memberId: string; member: { id: string; name: string } }>;
   }>;
   availableActions: string[];
+};
+
+export type InternalWorkflowProjection = {
+  divisionId: string;
+  divisionName: string;
+  divisionCycleId: string;
+  currentTeamStepId: string | null;
+  steps: Array<
+    | { kind: 'division-start' | 'division-end'; divisionId: string; divisionName: string; state: 'completed' | 'current' | 'upcoming' }
+    | { kind: 'team'; teamStepId: string; teamId: string; teamName: string; ordinal: number; state: 'completed' | 'current' | 'upcoming' }
+  >;
 };
 
 export type WorkRequestRouteRecipient = { id: string; label?: string; name?: string; email?: string };

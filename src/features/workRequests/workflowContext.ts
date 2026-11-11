@@ -23,10 +23,15 @@ type Input = {
 export function getWorkRequestWorkflowContext({ route, assignments = [], isRefreshing, routeStatus }: Input): WorkRequestWorkflowContext {
   const projection = route?.projection;
   const currentRouteOccurrenceId = projection?.routeStepId ?? null;
-  const currentStep = route?.steps.find((step) => step.id === currentRouteOccurrenceId) ?? null;
+  // A route can be returned before its history has been populated (or by an
+  // older backend response without `steps`). Treat that as missing workflow
+  // context instead of allowing the details page to crash.
+  const routeSteps = Array.isArray(route?.steps) ? route.steps : [];
+  const resolvedAssignments = Array.isArray(assignments) ? assignments : [];
+  const currentStep = routeSteps.find((step) => step.id === currentRouteOccurrenceId) ?? null;
   const currentDivisionCycleId = projection?.divisionCycleId ?? null;
-  const currentAssignment = assignments.find((assignment) => assignment.level === 'DIVISION' && assignment.divisionId === currentStep?.divisionId && assignment.unassignedAt === null && assignment.replacedAt === null)
-    ?? assignments.find((assignment) => assignment.level === 'DIVISION' && assignment.unassignedAt === null && assignment.replacedAt === null);
+  const currentAssignment = resolvedAssignments.find((assignment) => assignment.level === 'DIVISION' && assignment.divisionId === currentStep?.divisionId && assignment.unassignedAt === null && assignment.replacedAt === null)
+    ?? resolvedAssignments.find((assignment) => assignment.level === 'DIVISION' && assignment.unassignedAt === null && assignment.replacedAt === null);
 
   return {
     currentRouteOccurrenceId,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle } from 'lucide-react';
 import { useParams } from 'react-router-dom';
@@ -13,6 +13,7 @@ import { WorkRequestDocumentPreview } from '@/features/workRequests/WorkRequestD
 import { WorkRequestHeader } from '@/features/workRequests/WorkRequestHeader';
 import { WorkRequestInformationReads } from '@/features/workRequests/WorkRequestReadSections';
 import { WorkRequestRevisionRegistry } from '@/features/workRequests/WorkRequestRevisionRegistry';
+import { WorkRequestInternalWorkflow } from '@/features/workRequests/WorkRequestInternalWorkflow';
 import { WorkRequestWorkflowTracker } from '@/features/workRequests/WorkRequestWorkflowTracker';
 import { getWorkRequestWorkflowContext } from '@/features/workRequests/workflowContext';
 import { toWorkRequestWorkflowViewModel } from '@/features/workRequests/workflowViewModel';
@@ -21,7 +22,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { getDivisions } from '@/services/divisionService';
 import { ApiClientError, ApiNetworkError } from '@/services/apiClient';
 import { readableApiError } from '@/services/roleService';
-import { assignWorkRequestDivision, getWorkRequest, getWorkRequestAssignments, getWorkRequestAvailableActions, getWorkRequestAvailableDocumentCodes, getWorkRequestDocumentVersions, getWorkRequestDocuments, getWorkRequestEvents, getWorkRequestInfoRequestRecipients, getWorkRequestInfoRequests, getWorkRequestInternalHistory, getWorkRequestRoute, uploadWorkRequestDocuments } from '@/services/workRequestService';
+import { assignWorkRequestDivision, getWorkRequest, getWorkRequestAssignments, getWorkRequestAvailableActions, getWorkRequestAvailableDocumentCodes, getWorkRequestDocumentVersions, getWorkRequestDocuments, getWorkRequestEvents, getWorkRequestInfoRequestRecipients, getWorkRequestInfoRequests, getWorkRequestInternalCycle, getWorkRequestInternalHistory, getWorkRequestRoute, uploadWorkRequestDocuments } from '@/services/workRequestService';
 import { createRequestId } from '@/utils/requestId';
 import '@/features/workRequests/workRequestDetails.css';
 
@@ -37,8 +38,16 @@ export function WorkRequestDetailsPage() {
   const [pendingDocuments, setPendingDocuments] = useState<PendingAttachment[]>([]);
   const [specialAction, setSpecialAction] = useState<'assign-division' | 'request-info' | 'modify-route' | null>(null);
   const currentActorProfileId = typeof user?.activeActorProfileId === 'string' ? user.activeActorProfileId : null;
+  const cycleActor = useRef(currentActorProfileId);
   const detailQuery = useQuery({ queryKey: ['work-request', id], queryFn: () => getWorkRequest(id!), enabled, refetchOnWindowFocus: false });
   const routeQuery = useQuery({ queryKey: ['work-request', id, 'route'], queryFn: () => getWorkRequestRoute(id!), enabled, refetchOnWindowFocus: false });
+  const cycleId = routeQuery.data?.projection?.divisionCycleId ?? null;
+  const internalCycleQuery = useQuery({ queryKey: ['work-request', id, 'internal-cycle', cycleId], queryFn: () => getWorkRequestInternalCycle(workRequestId, cycleId!), enabled: enabled && Boolean(cycleId), refetchOnMount: 'always', refetchOnWindowFocus: false, retry: (count, error) => !(error instanceof ApiClientError && (error.status === 401 || error.status === 403 || error.status === 404)) && count < 3 });
+  useEffect(() => {
+    if (cycleActor.current === currentActorProfileId) return;
+    cycleActor.current = currentActorProfileId;
+    void queryClient.invalidateQueries({ queryKey: ['work-request', id, 'internal-cycle'] });
+  }, [currentActorProfileId, id, queryClient]);
   const internalHistoryQuery = useQuery({ queryKey: ['work-request', id, 'internal-history'], queryFn: () => getWorkRequestInternalHistory(id!), enabled });
   // Workflow availability is determined only by the backend for a Work Request
   // the active actor can open; no role or scope is reconstructed in the UI.
@@ -94,6 +103,10 @@ export function WorkRequestDetailsPage() {
   const assignedLead = divisionAssignment?.responsibleRecipients?.map((lead) => lead.displayName || lead.label).join(', ');
   const currentHandler = [currentDivision, assignedLead].filter(Boolean).join(' - ') || null;
   const internalHistoryEvents = internalHistoryQuery.data?.events ?? [];
+  // Do not reuse cached visibility while the active cycle is being refreshed.
+  const cycle = cycleActor.current !== currentActorProfileId || internalCycleQuery.isFetching || internalCycleQuery.isError ? undefined : internalCycleQuery.data;
+  const visibility = cycle?.workflowVisibility;
+  const internalWorkflow = visibility?.canViewInternalWorkflow ? cycle?.internalWorkflow : null;
   const routeError = routeQuery.isError
     ? `Lifecycle request failed${routeQuery.error instanceof ApiClientError ? ` (HTTP ${routeQuery.error.status})` : ''}: ${readableApiError(routeQuery.error, 'The Work Request lifecycle could not be loaded.')}`
     : null;
@@ -135,10 +148,12 @@ export function WorkRequestDetailsPage() {
 
   return <><div className="page-stack work-request-page">
     <WorkRequestHeader actionArea={actionArea} currentHandler={currentHandler} workRequest={detailQuery.data} />
-    <WorkRequestWorkflowTracker error={routeError} loading={routeQuery.isLoading} nodes={workflow?.mainRouteNodes ?? []} />
+    {visibility?.canViewMainWorkflow ? <WorkRequestWorkflowTracker error={routeError} loading={routeQuery.isLoading} nodes={workflow?.mainRouteNodes ?? []} /> : internalWorkflow ? <WorkRequestInternalWorkflow workflow={internalWorkflow} /> : null}
+    {cycleId && internalCycleQuery.isFetching ? <section className="work-request-panel work-request-tracker"><div className="work-request-panel__header"><h2>Internal Division Workflow</h2></div><div className="work-request-tracker__empty" role="status">Loading internal workflow…</div></section> : null}
+    {cycleId && internalCycleQuery.isError ? <section className="work-request-panel work-request-tracker"><div className="work-request-panel__header"><h2>Internal Division Workflow</h2></div><div className="work-request-tracker__empty" role="status">Internal workflow could not be loaded.</div></section> : null}
     <div className="work-request-page__grid">
       <div className="work-request-page__main"><WorkRequestDocumentPreview documents={documents} error={documentsQuery.isError} onDocumentChange={setSelectedDocumentId} selectedDocumentId={selectedDocumentId} versions={versions} versionsLoading={versionsQuery.isLoading} workRequestId={id} /></div>
-      <aside className="work-request-page__aside"><WorkRequestRevisionRegistry error={internalHistoryQuery.isError} events={internalHistoryEvents} loading={internalHistoryQuery.isLoading} /><WorkRequestAuditTrail error={eventsQuery.isError} events={events} loading={eventsQuery.isLoading} /></aside>
+      <aside className="work-request-page__aside">{visibility?.canViewMainWorkflow && internalWorkflow ? <WorkRequestInternalWorkflow vertical workflow={internalWorkflow} /> : null}{visibility?.canViewMainWorkflow ? <WorkRequestRevisionRegistry error={internalHistoryQuery.isError} events={internalHistoryEvents} loading={internalHistoryQuery.isLoading} /> : null}<WorkRequestAuditTrail error={eventsQuery.isError} events={events} loading={eventsQuery.isLoading} /></aside>
     </div>
   </div>{uploadOpen ? <WorkRequestDocumentUploadModal attachments={pendingDocuments} codes={documentCodes} codesError={documentCodesError} codesLoading={documentCodesLoading} onChange={setPendingDocuments} onClose={() => { if (!uploadMutation.isPending) { setUploadOpen(false); setPendingDocuments([]); } }} onSubmit={submitDocuments} saving={uploadMutation.isPending} /> : null}{specialAction === 'assign-division' ? <AssignDivisionModal workRequestId={id} onClose={() => setSpecialAction(null)} onSuccess={async () => { await refreshWorkflow(); setSpecialAction(null); }} /> : null}{specialAction === 'modify-route' ? <div className="division-modal-backdrop" role="presentation"><section aria-labelledby="modify-route-title" aria-modal="true" className="division-modal work-request-action-dialog" role="dialog"><div className="division-modal__head"><strong id="modify-route-title">Modify future route</strong><button aria-label="Close" onClick={() => setSpecialAction(null)} type="button">X</button></div><div className="division-form"><p>Future route editing is not yet available in this interface.</p><div className="division-form__actions"><button onClick={() => setSpecialAction(null)} type="button">Close</button></div></div></section></div> : null}{specialAction === 'request-info' ? <WorkRequestInformationReads currentActorProfileId={currentActorProfileId} documents={documents} history={{ data: infoRequestsQuery.data, loading: infoRequestsQuery.isLoading, error: infoRequestsQuery.isError, forbidden: infoRequestsQuery.error instanceof ApiClientError && infoRequestsQuery.error.status === 403, retry: () => { void infoRequestsQuery.refetch(); } }} onClose={() => setSpecialAction(null)} onReplySuccess={refreshWorkflow} recipients={{ data: infoRecipientsQuery.data, loading: infoRecipientsQuery.isLoading, error: infoRecipientsQuery.isError, forbidden: infoRecipientsQuery.error instanceof ApiClientError && infoRecipientsQuery.error.status === 403, retry: () => { void infoRecipientsQuery.refetch(); } }} workRequestId={id} /> : null}</>;
 }
