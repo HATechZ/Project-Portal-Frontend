@@ -25,10 +25,18 @@
 .work-request-header__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 7px; }
 .work-request-header__actions button { box-sizing: border-box; min-height: 34px; border: 1px solid #dfe7ef; border-radius: 8px; background: #fff; box-shadow: 0 2px 6px rgba(25, 44, 71, .06); color: #65778e; padding: 7px 10px; font-size: 10px; font-weight: 800; line-height: 18px; }
 .work-request-header__actions button:first-child { border-color: #0b91a8; background: #1595af; color: #fff; }
+.work-request-header__actions button:hover:not(:disabled) { border-color: #87bdc5; background: #eaf7f8; color: #075b66; }
+.work-request-header__actions button:first-child:hover:not(:disabled) { border-color: #087285; background: #087285; color: #fff; }
+.work-request-header__actions button:focus-visible { outline: 2px solid #087285; outline-offset: 2px; }
 .work-request-header__actions button:disabled { cursor: not-allowed; opacity: .88; }
 .work-request-action-menu { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .work-request-action-dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); }
 .work-request-action-dialog .division-form { max-height: calc(100dvh - 120px); overflow: auto; }
+.work-request-team-submit-dialog .division-modal__head { border-bottom: 0; padding-bottom: 8px; }
+.work-request-team-submit-dialog .division-modal__head > div { min-width: 0; gap: 8px; }
+.work-request-team-submit-dialog .division-modal__head span { color: #526879; font-size: 13px; line-height: 1.5; }
+.work-request-team-submit-dialog .division-modal__head button { flex: 0 0 32px; }
+.work-request-team-submit-dialog .division-form { padding-top: 8px; }
 .work-request-info-dialog .division-form { display: flex; flex-direction: column; }
 .work-request-info-dialog .division-form__actions { position: sticky; bottom: 0; z-index: 1; margin-top: auto; background: #fff; padding-top: 12px; }
 .info-recipients { display: grid; gap: 8px; min-width: 0; }
@@ -158,6 +166,7 @@
 .work-request-preview-card__controls select { max-width: 260px; overflow: hidden; border: 1px solid #394a65; border-radius: 6px; outline: 0; background: #1d2a43; color: #dce8f6; padding: 5px 8px; text-overflow: ellipsis; font-size: 10px; }
 .work-request-preview-card__controls small { color: #aab8cb; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; white-space: nowrap; }
 .work-request-preview-card__controls button { width: 25px; height: 25px; border: 1px solid #394a65; border-radius: 5px; background: #1d2a43; color: #dce8f6; font-size: 13px; }
+.work-request-preview-card__controls button:hover:not(:disabled) { border-color: #62dce6; background: #30435f; color: #fff; }
 .work-request-preview-card__controls button:disabled { cursor: not-allowed; opacity: .4; }
 .work-request-preview-card__controls em { flex: 0 0 auto; border-radius: 4px; background: #2c3a52; color: #e3e9f3; padding: 5px 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; font-style: normal; font-weight: 800; }
 .work-request-preview-card__download { display: inline-flex; width: auto !important; min-height: 25px; align-items: center; gap: 5px; padding: 5px 8px !important; }
@@ -243,6 +252,7 @@
 .work-request-chat-message__meta { font-size: 10px; opacity: .78; }
 .work-request-chat-message .work-request-action { justify-self: end; margin-top: 4px; }
 .work-request-chat-message--incoming .work-request-action { background: #fff; color: #354b62; border: 1px solid #cfdbe7; }
+.work-request-chat-message--incoming .work-request-action:hover { background: #07525f; color: #fff; }
 .work-request-chat-attachments { display: grid; gap: 6px; margin-top: 4px; }
 .work-request-chat-attachment { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; border-radius: 8px; padding: 7px 8px; background: rgba(255, 255, 255, .18); }
 .work-request-chat-message--incoming .work-request-chat-attachment { background: #fff; border: 1px solid #e1e9f0; }
@@ -335,6 +345,8 @@
   .work-request-page { padding: 18px 14px 28px; }
   .work-request-header h1 { font-size: 24px; }
   .work-request-header__context { gap: 7px 10px; }
+  .work-request-header__action-area, .work-request-header__actions { width: 100%; min-width: 0; }
+  .work-request-header__actions button { flex: 1 1 auto; max-width: 100%; min-height: 40px; overflow-wrap: anywhere; }
   .work-request-preview-card__controls { flex-wrap: wrap; }
   .work-request-preview-card__controls select { max-width: calc(100% - 54px); flex: 1 1 150px; }
 }
@@ -386,4 +398,6 @@
   .work-request-member-submit-modal__header { padding: 16px; }
   .work-request-member-submit-modal__heading-icon { flex-basis: 36px; width: 36px; height: 36px; }
   .work-request-member-submit-modal .division-form__actions { margin-right: -16px; margin-left: -16px; }
+  .work-request-action-dialog .division-form__actions, .work-request-member-submit-modal .division-form__actions, .work-request-document-modal .division-form__actions { flex-wrap: wrap; }
+  .work-request-action-dialog .division-form__actions button, .work-request-member-submit-modal .division-form__actions button, .work-request-document-modal .division-form__actions button { flex: 1 1 120px; height: auto; min-height: 40px; white-space: normal; }
 }

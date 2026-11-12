@@ -1,4 +1,4 @@
-import type { WorkRequestAssignment } from '@/services/workRequestService';
+import type { InternalWorkflowProjection, WorkRequestAssignment, WorkRequestRouteHistory } from '@/services/workRequestService';
 
 export const INTERNAL_WORKFLOW_STEPS = [
   { state: 'MEMBER_ASSIGNED', label: 'Preparation', assignmentLevel: 'MEMBER' },
@@ -83,4 +83,29 @@ export function friendlyWorkflowAction(action: string) {
     WR_FINAL_RELEASE: 'Final Release Completed',
   };
   return labels[action] || action.toLowerCase().split('_').filter(Boolean).map((part) => `${part[0].toUpperCase()}${part.slice(1)}`).join(' ');
+}
+
+type WorkflowPresentationInput = {
+  routeData: WorkRequestRouteHistory | undefined;
+  internalWorkflows: InternalWorkflowProjection[] | undefined;
+  internalWorkflowsError: unknown;
+  internalWorkflowsLoading: boolean;
+};
+
+/** Keeps the independently-authorized route and Internal Cycle reads separate. */
+export function getWorkflowPresentation({ routeData, internalWorkflows, internalWorkflowsError, internalWorkflowsLoading }: WorkflowPresentationInput) {
+  const canViewMainWorkflow = routeData?.workflowVisibility?.canViewMainWorkflow === true;
+  const expectedInternalCycleAbsence = typeof internalWorkflowsError === 'object'
+    && internalWorkflowsError !== null
+    && 'status' in internalWorkflowsError
+    && [401, 403, 404].includes((internalWorkflowsError as { status?: unknown }).status as number);
+
+  return {
+    canViewMainWorkflow,
+    // Keep a stale query value or malformed collection response from breaking
+    // the Work Request page while the query refreshes.
+    internalWorkflows: Array.isArray(internalWorkflows) ? internalWorkflows : [],
+    showInternalWorkflowLoading: internalWorkflowsLoading,
+    showInternalWorkflowError: Boolean(internalWorkflowsError) && !expectedInternalCycleAbsence,
+  };
 }

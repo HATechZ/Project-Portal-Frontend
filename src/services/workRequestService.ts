@@ -147,6 +147,7 @@ export type WorkRequestRouteHistory = {
   projection: WorkRequestRouteProjection | null;
   steps: WorkRequestRouteStep[];
   events?: WorkRequestRouteEvent[];
+  workflowVisibility: { canViewMainWorkflow: boolean };
 };
 
 export type WorkRequestInternalCycle = {
@@ -172,6 +173,9 @@ export type InternalWorkflowProjection = {
     | { kind: 'team'; teamStepId: string; teamId: string; teamName: string; ordinal: number; state: 'completed' | 'current' | 'upcoming' }
   >;
 };
+
+/** Actor-authorized Internal Workflow cycles returned by GET /internal-cycles. */
+export type WorkRequestInternalCycleCollection = InternalWorkflowProjection[];
 
 export type WorkRequestRouteRecipient = { id: string; label?: string; name?: string; email?: string };
 /** Backend-owned recipient target. Its identifier is returned by the recipients endpoint and is sent back unchanged. */
@@ -453,6 +457,31 @@ export function getWorkRequestInternalHistory(id: string) {
 
 export function getWorkRequestInternalCycle(id: string, cycleId: string) {
   return apiClient<ApiResponse<WorkRequestInternalCycle>>(`${requestPath(id)}/internal-cycles/${encodeURIComponent(cycleId)}`).then((response) => response.data);
+}
+
+export function getWorkRequestInternalCycles(id: string) {
+  return apiClient<ApiResponse<unknown>>(`${requestPath(id)}/internal-cycles`).then((response) => normalizeInternalWorkflowCollection(response.data));
+}
+
+/** The collection DTO is envelope-shaped; return each cycle's existing projection to page consumers. */
+function normalizeInternalWorkflowCollection(value: unknown): WorkRequestInternalCycleCollection {
+  const collection = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? Object.values(value).find(Array.isArray) ?? []
+      : [];
+  return collection.flatMap((cycle) => {
+    if (!cycle || typeof cycle !== 'object') return [];
+    const projection = (cycle as { internalWorkflow?: unknown }).internalWorkflow;
+    return isInternalWorkflowProjection(projection) ? [projection] : isInternalWorkflowProjection(cycle) ? [cycle] : [];
+  });
+}
+
+function isInternalWorkflowProjection(value: unknown): value is InternalWorkflowProjection {
+  return Boolean(value)
+    && typeof value === 'object'
+    && typeof (value as { divisionCycleId?: unknown }).divisionCycleId === 'string'
+    && Array.isArray((value as { steps?: unknown }).steps);
 }
 
 export function defineWorkRequestTeamSequence(id: string, cycleId: string, teamIds: string[]) {
