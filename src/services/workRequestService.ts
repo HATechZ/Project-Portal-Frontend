@@ -180,7 +180,7 @@ export type WorkRequestInternalCycleCollection = InternalWorkflowProjection[];
 export type WorkRequestRouteRecipient = { id: string; label?: string; name?: string; email?: string };
 /** Backend-owned recipient target. Its identifier is returned by the recipients endpoint and is sent back unchanged. */
 /** Backend-authorized Request Info target. `actorId` is posted back unchanged as `targetActorId`. */
-export type WorkRequestInfoRequestRecipient = { actorId: string; actorProfileId?: string; label?: string; displayName?: string; memberId?: string | null; email?: string | null; divisionId?: string | null; divisionName?: string | null; designationId?: string | null; designationName?: string | null; teamIds?: string[]; teamNames?: string[]; relationshipContexts?: unknown[]; [key: string]: unknown };
+export type WorkRequestInfoRequestRecipient = { actorId: string; actorProfileId?: string; canReceive: boolean; label?: string; displayName?: string; memberId?: string | null; email?: string | null; divisionId?: string | null; divisionName?: string | null; designationId?: string | null; designationName?: string | null; teamIds?: string[]; teamNames?: string[]; relationshipContexts?: unknown[]; [key: string]: unknown };
 export type WorkRequestInfoRecipientStatus = {
   activeContacts: number;
   contactsWithActiveDefaultProfile: number;
@@ -525,7 +525,7 @@ export function getWorkRequestInfoRequests(id: string) {
 }
 
 export function getWorkRequestInfoRequestRecipients(id: string) {
-  return apiClient<ApiResponse<WorkRequestInfoRequestRecipient[]>>(`${requestPath(id)}/info-requests/recipients`).then((response) => response.data);
+  return apiClient<ApiResponse<WorkRequestInfoRequestRecipient[]>>(`${requestPath(id)}/info-requests/recipients`).then((response) => response.data.map((recipient) => ({ ...recipient, actorId: recipient.actorId || recipient.actorProfileId || '' })));
 }
 
 export function getWorkRequestInfoRecipientStatus(id: string) {

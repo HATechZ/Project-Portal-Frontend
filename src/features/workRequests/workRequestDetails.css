@@ -37,6 +37,8 @@
 .work-request-team-submit-dialog .division-modal__head span { color: #526879; font-size: 13px; line-height: 1.5; }
 .work-request-team-submit-dialog .division-modal__head button { flex: 0 0 32px; }
 .work-request-team-submit-dialog .division-form { padding-top: 8px; }
+.work-request-forward-dialog .division-form { padding-top: 14px; }
+.work-request-forward-dialog .division-form__actions { margin-top: 0; border-top: 0; padding-top: 8px; }
 .work-request-info-dialog .division-form { display: flex; flex-direction: column; }
 .work-request-info-dialog .division-form__actions { position: sticky; bottom: 0; z-index: 1; margin-top: auto; background: #fff; padding-top: 12px; }
 .info-recipients { display: grid; gap: 8px; min-width: 0; }
@@ -250,6 +252,9 @@
 .work-request-chat-message--outgoing .work-request-chat-message__sender { color: #fff; }
 .work-request-chat-message__body { white-space: pre-wrap; line-height: 1.45; }
 .work-request-chat-message__meta { font-size: 10px; opacity: .78; }
+.work-request-chat-local { display: grid; justify-items: end; gap: 4px; justify-self: end; max-width: 88%; }
+.work-request-chat-local .work-request-chat-message { max-width: 100%; }
+.work-request-chat-local__error { color: #a16207; font-size: 11px; }
 .work-request-chat-message .work-request-action { justify-self: end; margin-top: 4px; }
 .work-request-chat-message--incoming .work-request-action { background: #fff; color: #354b62; border: 1px solid #cfdbe7; }
 .work-request-chat-message--incoming .work-request-action:hover { background: #07525f; color: #fff; }

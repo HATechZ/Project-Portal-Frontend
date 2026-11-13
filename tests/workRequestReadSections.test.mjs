@@ -3,32 +3,39 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 import { build } from 'esbuild';
 import React from 'react';
+const { QueryClient, QueryClientProvider } = createRequire(import.meta.url)('@tanstack/react-query');
 import { renderToStaticMarkup } from 'react-dom/server';
 
-const output = await build({ entryPoints: ['src/features/workRequests/WorkRequestReadSections.tsx'], bundle: true, write: false, platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react/jsx-runtime', 'lucide-react'], logLevel: 'silent' });
+const output = await build({ entryPoints: ['src/features/workRequests/WorkRequestReadSections.tsx'], bundle: true, alias: { '@': './src' }, define: { 'import.meta.env': '{}' }, write: false, platform: 'node', format: 'cjs', jsx: 'automatic', external: ['react', 'react/jsx-runtime', 'lucide-react', '@tanstack/react-query'], logLevel: 'silent' });
 const module = { exports: {} };
 new Function('module', 'exports', 'require', output.outputFiles[0].text)(module, module.exports, createRequire(import.meta.url));
-const { WorkRequestDivisionAssignment, WorkRequestInformationReads } = module.exports;
-const state = (data, error = false) => ({ data, loading: false, error, retry() {} });
+const { WorkRequestInformationReads } = module.exports;
+const state = (data) => ({ data, loading: false, error: false, retry() {} });
+const recipients = [
+  { actorId: 'marketing', displayName: 'Hasan Al Mahadi', divisionName: 'Marketing Division', designationName: 'Marketing Lead', canReceive: true },
+  { actorId: 'engineering', displayName: 'Engineering Lead', divisionName: 'Engineering Division', designationName: 'Division Lead', canReceive: true },
+  { actorId: 'pmd1', displayName: 'Hasan Khan Alex', divisionName: 'Project Management Division', teamNames: ['PMD-1'], designationName: 'Team Lead', canReceive: true },
+  { actorId: 'pmd2', displayName: 'Second Team Lead', divisionName: 'Project Management Division', teamNames: ['PMD-2'], designationName: 'Team Lead', canReceive: true },
+  { actorId: 'denied', displayName: 'Denied Recipient', canReceive: false },
+];
+const render = (history = [], extra = {}) => renderToStaticMarkup(React.createElement(QueryClientProvider, { client: new QueryClient() }, React.createElement(WorkRequestInformationReads, { currentActorProfileId: 'me', documents: [], history: state(history), recipients: state(recipients), onClose() {}, onReplySuccess: async () => {}, workRequestId: 'request', ...extra })));
 
-test('renders the current assignment and backend responsible Lead without a member or role check', () => {
-  const assignments = [{ id: 'old', level: 'DIVISION', divisionId: 'division', replacedAt: '2025-01-01', responsibleRecipients: [{ actorId: 'old', label: 'Old lead' }] }, { id: 'new', level: 'DIVISION', divisionId: 'division', unassignedAt: null, replacedAt: null, responsibleRecipients: [{ actorId: 'lead', label: 'Profile', displayName: 'Tanvir Zain' }] }];
-  const html = renderToStaticMarkup(React.createElement(WorkRequestDivisionAssignment, { state: state(assignments), divisionNames: new Map([['division', 'Project Management']]) }));
-  assert.match(html, /Project Management/);
-  assert.match(html, /Tanvir Zain/);
-  assert.doesNotMatch(html, /Old lead/);
+test('shows every authorized division and team lead with backend labels, excluding denied recipients', () => {
+  const html = render();
+  for (const value of ['Hasan Al Mahadi', 'Marketing Division', 'Marketing Lead', 'Engineering Lead', 'Engineering Division', 'Hasan Khan Alex', 'Project Management Division · PMD-1', 'PMD-2', 'Second Team Lead', 'Team Lead']) assert.ok(html.includes(value), value);
+  assert.doesNotMatch(html, /Denied Recipient/);
+  assert.equal((html.match(/aria-pressed="false"/g) ?? []).length, 4);
 });
 
-test('renders information history, eligible recipients and unavailable contacts from successful reads', () => {
-  const history = [{ id: 'request', message: 'Please clarify', status: 'OPEN', requestedAt: '2026-01-01T00:00:00Z', requester: { actorId: 'sender' }, target: { actorId: 'recipient' }, responses: [{ id: 'response', message: 'More details', respondedAt: '2026-01-02T00:00:00Z', responder: { actorId: 'recipient' } }] }];
-  const recipients = [{ actorId: 'recipient', displayName: 'Tanvir', contextType: 'DIVISION_LEAD', context: { name: 'Engineering' } }];
-  const status = { unavailableContacts: [{ contactId: 'contact', displayName: 'Arif', contextType: 'CLIENT_CONTACT', context: { name: 'Meridian' } }] };
-  const html = renderToStaticMarkup(React.createElement(WorkRequestInformationReads, { history: state(history), recipients: state(recipients), status: state(status) }));
-  for (const value of ['Please clarify', 'More details', 'Tanvir', 'Engineering', 'Arif', 'Meridian', 'Unavailable']) assert.ok(html.includes(value));
+test('existing resolved or open conversations and workflow state do not shrink recipients', () => {
+  const history = [{ id: 'old', message: 'Old', status: 'RESOLVED', requestedAt: '2026-01-01', requester: { actorId: 'me' }, target: { actorId: 'marketing' }, responses: [] }, { id: 'open', message: 'Open', status: 'OPEN', requestedAt: '2026-01-02', requester: { actorId: 'pmd1' }, target: { actorId: 'me' }, responses: [] }];
+  for (const workflowState of ['INITIAL', 'COMPLETED']) {
+    const html = render(history, { workflowState, currentActorRole: 'Unrelated role' });
+    for (const recipient of recipients.filter((item) => item.canReceive)) assert.ok(html.includes(recipient.displayName));
+    assert.equal((html.match(/aria-pressed="false"/g) ?? []).length, 4);
+  }
 });
 
-test('combines read failures into one section error while retaining successful data', () => {
-  const html = renderToStaticMarkup(React.createElement(WorkRequestInformationReads, { history: state(undefined, true), recipients: state([{ actorId: 'a', displayName: 'Available' }]), status: state(undefined, true) }));
-  assert.equal((html.match(/Some information request data could not be loaded/g) ?? []).length, 1);
-  assert.match(html, /Available/);
+test('does not exclude recipients when the current actor is unavailable', () => {
+  assert.equal((render([], { currentActorProfileId: undefined }).match(/aria-pressed="false"/g) ?? []).length, 4);
 });

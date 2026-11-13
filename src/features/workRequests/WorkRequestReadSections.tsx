@@ -11,6 +11,7 @@ import { documentLabel, documentMimeType, documentVersionId, type ApiRecord } fr
 import { formatDateTime } from './workflowPresentation';
 
 type ReadState<T> = { data?: T; loading: boolean; error: boolean; forbidden?: boolean; retry: () => void };
+type OutgoingMessage = { id: string; personId: string; message: string; files: string[]; time: string; status: 'sending' | 'sent' | 'failed'; existingIds: string[]; documentVersionIds: string[] };
 const MAX_DOCUMENTS = 20;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const fileAccept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.dwg,.dxf,.jpg,.jpeg,.png,.zip';
@@ -37,40 +38,25 @@ export function WorkRequestInformationReads({ currentActorProfileId, documents, 
 }) {
   const [selectedPersonId, setSelectedPersonId] = useState('');
   const [replyTargetId, setReplyTargetId] = useState<string | null>(null);
+  const [outgoing, setOutgoing] = useState<OutgoingMessage[]>([]);
   const messageAreaRef = useRef<HTMLDivElement>(null);
   const lastContentKey = useRef<string | null>(null);
   const initialPersonSelected = useRef(false);
   const participantPickerRef = useRef<HTMLDetailsElement>(null);
-  const names = new Map((recipients.data ?? []).map((recipient) => [recipient.actorId, recipientPresentation(recipient).displayName]));
-  const recipientByActorId = new Map((recipients.data ?? []).map((recipient) => [recipient.actorId, recipient]));
+  const eligibleRecipients = (recipients.data ?? []).filter((recipient) => recipient.canReceive === true);
+  const recipientByActorId = new Map(eligibleRecipients.map((recipient) => [recipient.actorId, recipient]));
   const actor = (person: WorkRequestInfoActor, fallback: string) => {
     if (person.actorId === currentActorProfileId) return 'You';
-    const backendName = recipientPresentation(person).displayName;
-    return names.get(person.actorId) ?? (backendName !== 'Recipient' ? backendName : person.email?.trim() || fallback);
+    const backendName = recipientPresentation(recipientByActorId.get(person.actorId) ?? person).displayName;
+    return backendName !== 'Recipient' ? backendName : person.email?.trim() || fallback;
   };
   // Each API record is an independent Request Info thread. The record ID is the
   // only grouping key; recipients and message text are presentation-only.
   const threads = (history.data ?? []).map((request) => ({ infoRequestId: request.id, request })).sort((left, right) => dateValue(left.request.requestedAt) - dateValue(right.request.requestedAt));
-  const people = (() => {
-    const peopleById = new Map<string, WorkRequestInfoActor>();
-    threads.forEach(({ request }) => {
-      if (!currentActorProfileId || (request.requester.actorId !== currentActorProfileId && request.target.actorId !== currentActorProfileId)) return;
-      [request.requester, request.target].forEach((person) => {
-        if (person.actorId !== currentActorProfileId) peopleById.set(person.actorId, person);
-      });
-    });
-    (recipients.data ?? []).forEach((recipient) => {
-      if (recipient.actorId !== currentActorProfileId && !peopleById.has(recipient.actorId)) peopleById.set(recipient.actorId, recipient);
-    });
-    return [...peopleById.values()].map((person) => {
-      const presentation = recipientPresentation(recipientByActorId.get(person.actorId) ?? person);
-      const historyPresentation = recipientPresentation(person);
-      const division = visibleName(presentation.division ?? historyPresentation.division);
-      const designation = visibleName(presentation.designation ?? historyPresentation.designation);
-      const teams = [...new Set([...presentation.teams, ...historyPresentation.teams].map(visibleName).filter(Boolean))];
-      return { actorId: person.actorId, division, designation, teams, label: visibleName(actor(person, 'User')) || 'User' };
-    }).sort((left, right) => left.label.localeCompare(right.label));
-  })();
+  const people = [...recipientByActorId.values()].map((person) => {
+    const presentation = recipientPresentation(person);
+    return { actorId: person.actorId, division: visibleName(presentation.division), designation: visibleName(presentation.designation), teams: presentation.teams.map(visibleName).filter(Boolean), label: visibleName(presentation.displayName) || 'User' };
+  }).sort((left, right) => left.label.localeCompare(right.label));
   const selectedThreads = selectedPersonId
     ? threads.filter(({ request }) => (request.requester.actorId === currentActorProfileId && request.target.actorId === selectedPersonId) || (request.target.actorId === currentActorProfileId && request.requester.actorId === selectedPersonId))
     : [];
@@ -78,10 +64,15 @@ export function WorkRequestInformationReads({ currentActorProfileId, documents, 
     { kind: 'request' as const, time: request.requestedAt, request },
     ...(request.responses ?? []).map((response) => ({ kind: 'response' as const, time: response.respondedAt, response })),
   ]).sort((left, right) => dateValue(left.time) - dateValue(right.time));
+  const localMessages = outgoing.filter((item) => item.personId === selectedPersonId && !(item.status === 'sent' && messages.some((entry) => {
+    const record = entry.kind === 'request' ? entry.request : entry.response;
+    const sender = entry.kind === 'request' ? entry.request.requester : entry.response.responder;
+    return !item.existingIds.includes(`${entry.kind}-${record.id}`) && sender.actorId === currentActorProfileId && (record.message ?? '').trim() === item.message && item.documentVersionIds.every((id) => record.attachments?.some((attachment) => attachment.documentVersionId === id));
+  })));
   const selectedPerson = people.find((person) => person.actorId === selectedPersonId) ?? null;
   const replyableRequest = selectedThreads.find(({ request }) => request.id === replyTargetId && request.status === 'OPEN' && request.target.actorId === currentActorProfileId)?.request ?? [...selectedThreads].reverse().find(({ request }) => request.status === 'OPEN' && request.target.actorId === currentActorProfileId)?.request ?? null;
-  const eligibleRecipient = currentActorProfileId && !recipients.error ? (recipients.data ?? []).find((recipient) => recipient.actorId === selectedPersonId) ?? null : null;
-  const contentKey = selectedPersonId ? `${selectedPersonId}|${selectedThreads.map(({ request }) => `${request.id}:${request.requestedAt}:${request.responses?.map((response) => `${response.id}:${response.respondedAt}`).join(',') ?? ''}`).join('|')}` : '';
+  const eligibleRecipient = currentActorProfileId && !recipients.error ? eligibleRecipients.find((recipient) => recipient.actorId === selectedPersonId) ?? null : null;
+  const contentKey = selectedPersonId ? `${selectedPersonId}|${selectedThreads.map(({ request }) => `${request.id}:${request.requestedAt}:${request.responses?.map((response) => `${response.id}:${response.respondedAt}`).join(',') ?? ''}`).join('|')}|${localMessages.map((item) => `${item.id}:${item.status}`).join(',')}` : '';
 
   useEffect(() => {
     if (initialPersonSelected.current || !currentActorProfileId || history.loading) return;
@@ -115,7 +106,6 @@ export function WorkRequestInformationReads({ currentActorProfileId, documents, 
     <div className="work-request-info-card__content">
       {history.forbidden ? <div className="work-request-side-card__empty" role="alert">You do not have access to this Request Information history.</div> : history.error ? <ReadError message="Request Information history could not be loaded." retry={history.retry} /> : null}
       {recipients.forbidden ? <div className="work-request-side-card__empty" role="alert">You do not have access to eligible recipients.</div> : recipients.error ? <ReadError message="Eligible recipients could not be loaded." retry={recipients.retry} /> : null}
-      {!history.loading && !history.error && history.data?.length === 0 ? <div className="work-request-side-card__empty">No previous Request Information history.</div> : null}
       <div className="work-request-read-content work-request-chat">
         {history.loading ? <span>Loading history...</span> : !selectedPersonId ? <div className="work-request-side-card__empty">Select a person to view information requests.</div> : <>{selectedPerson ? <div className="work-request-chat-person"><strong>{selectedPerson.label}</strong>{selectedPerson.division ? <span className="work-request-chat-person__division">{selectedPerson.division}</span> : null}{selectedPerson.teams.length || selectedPerson.designation ? <span>{[...selectedPerson.teams, selectedPerson.designation].filter(Boolean).join(' · ')}</span> : null}</div> : null}<div className="work-request-chat__messages" ref={messageAreaRef}>{messages.length ? messages.map((entry) => {
           if (entry.kind === 'request') {
@@ -132,7 +122,7 @@ export function WorkRequestInformationReads({ currentActorProfileId, documents, 
           const response = entry.response;
           const sentByCurrentActor = response.responder.actorId === currentActorProfileId;
           return <article className={`work-request-chat-message ${sentByCurrentActor ? 'work-request-chat-message--outgoing' : 'work-request-chat-message--incoming'}`} key={`response-${response.id}`}><div className="work-request-chat-message__header">{!sentByCurrentActor ? <span className="work-request-chat-message__sender">{actor(response.responder, 'Responder')}</span> : null}<span className="work-request-chat-message__meta">{formatDateTime(response.respondedAt)}</span></div>{response.message?.trim() ? <span className="work-request-chat-message__body">{response.message}</span> : null}<InfoRequestAttachments attachments={response.attachments} documents={documents} /></article>;
-        }) : null}</div></>}<InfoRequestComposer key={selectedPersonId} eligibleRecipient={eligibleRecipient} onSuccess={onReplySuccess} replyableRequest={replyableRequest} selectedPersonId={selectedPersonId} workRequestId={workRequestId} />
+        }) : null}{localMessages.map((item) => <div className="work-request-chat-local" key={item.id}><article className="work-request-chat-message work-request-chat-message--outgoing"><div className="work-request-chat-message__header"><span className="work-request-chat-message__meta">{formatDateTime(item.time)}{item.status === 'sending' ? ' · Sending…' : null}</span></div>{item.message ? <span className="work-request-chat-message__body">{item.message}</span> : null}{item.files.length ? <div className="work-request-chat-attachments">{item.files.map((name, index) => <div className="work-request-chat-attachment" key={`${index}-${name}`}><strong>{name}</strong></div>)}</div> : null}</article>{item.status === 'failed' ? <span className="work-request-chat-local__error" role="alert">Could not send. Please try again.</span> : null}</div>)}</div></>}<InfoRequestComposer key={selectedPersonId} eligibleRecipient={eligibleRecipient} existingIds={messages.map((entry) => `${entry.kind}-${entry.kind === 'request' ? entry.request.id : entry.response.id}`)} onOutgoing={(item) => setOutgoing((items) => [...items, item])} onOutgoingChange={(id, update) => setOutgoing((items) => items.map((item) => item.id === id ? { ...item, ...update } : item))} onSuccess={onReplySuccess} replyableRequest={replyableRequest} selectedPersonId={selectedPersonId} workRequestId={workRequestId} />
       </div>
     </div>
   </section></div>;
@@ -200,7 +190,7 @@ function triggerDownload(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function InfoRequestComposer({ eligibleRecipient, onSuccess, replyableRequest, selectedPersonId, workRequestId }: { eligibleRecipient: WorkRequestInfoRequestRecipient | null; onSuccess: () => Promise<void>; replyableRequest: WorkRequestInfoRequest | null; selectedPersonId: string; workRequestId: string }) {
+function InfoRequestComposer({ eligibleRecipient, existingIds, onOutgoing, onOutgoingChange, onSuccess, replyableRequest, selectedPersonId, workRequestId }: { eligibleRecipient: WorkRequestInfoRequestRecipient | null; existingIds: string[]; onOutgoing: (item: OutgoingMessage) => void; onOutgoingChange: (id: string, update: Partial<OutgoingMessage>) => void; onSuccess: () => Promise<void>; replyableRequest: WorkRequestInfoRequest | null; selectedPersonId: string; workRequestId: string }) {
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -208,15 +198,22 @@ function InfoRequestComposer({ eligibleRecipient, onSuccess, replyableRequest, s
   const codes = codesQuery.data ?? [];
   const canSend = Boolean(replyableRequest || eligibleRecipient);
   const mutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (localId: string) => {
+      try {
       const uploads = attachments.length ? await uploadWorkRequestDocuments(workRequestId, attachments, createRequestId()) : null;
       const documentVersionIds = uploads ? extractUploadedVersionIds(uploads.data) : [];
       if (attachments.length && documentVersionIds.length !== attachments.length) throw new Error('One or more attachments did not return a document version ID.');
-      return replyableRequest
+      const result = await (replyableRequest
         ? respondToWorkRequestInfo(workRequestId, replyableRequest.id, message.trim(), documentVersionIds)
-        : createWorkRequestInfoRequest(workRequestId, eligibleRecipient!.actorId, message.trim(), documentVersionIds);
+        : createWorkRequestInfoRequest(workRequestId, eligibleRecipient!.actorId, message.trim(), documentVersionIds));
+      onOutgoingChange(localId, { status: 'sent', documentVersionIds });
+      return result;
+      } catch (error) {
+        onOutgoingChange(localId, { status: 'failed' });
+        throw error;
+      }
     },
-    onSuccess: () => { setMessage(''); setAttachments([]); void onSuccess(); toast.success(replyableRequest ? 'Information request reply sent.' : 'Information request sent.'); },
+    onSuccess: () => { setMessage(''); setAttachments([]); void onSuccess(); },
     onError: (reason) => toast.error(readableApiError(reason, 'Unable to send the information request.')),
   });
   const addFiles = (files: FileList | null) => {
@@ -233,7 +230,9 @@ function InfoRequestComposer({ eligibleRecipient, onSuccess, replyableRequest, s
       toast.error('Select an available document code for each attachment before sending.');
       return;
     }
-    mutation.mutate();
+    const localId = createRequestId();
+    onOutgoing({ id: localId, personId: selectedPersonId, message: message.trim(), files: attachments.map((attachment) => attachment.file.name), time: new Date().toISOString(), status: 'sending', existingIds, documentVersionIds: [] });
+    mutation.mutate(localId);
   };
   return <form className="work-request-chat-composer" onSubmit={(event) => { event.preventDefault(); submit(); }}><div className="work-request-chat-composer__chips">{attachments.map((attachment) => <div className="work-request-chat-composer__chip" key={attachment.id}><span title={attachment.file.name}>{attachment.file.name} · {formatFileSize(attachment.file.size)}</span><select aria-label={`Document code for ${attachment.file.name}`} disabled={mutation.isPending || codesQuery.isLoading} onChange={(event) => updateCode(attachment.id, event.target.value)} value={attachment.documentCodeId}><option value="">Document code</option>{codes.map((code) => <option key={code.id} value={code.id}>{code.name} — {code.code}</option>)}</select><button aria-label={`Remove ${attachment.file.name}`} disabled={mutation.isPending} onClick={() => setAttachments((items) => items.filter((item) => item.id !== attachment.id))} type="button"><X size={13} /></button></div>)}</div><div className="work-request-chat-composer__bar"><input accept={fileAccept} hidden multiple onChange={(event) => { addFiles(event.target.files); event.target.value = ''; }} ref={fileInputRef} type="file" /><button aria-label="Attach files" className="work-request-chat-composer__attach" disabled={!canSend || mutation.isPending || codesQuery.isLoading || codesQuery.isError} onClick={() => fileInputRef.current?.click()} type="button"><Paperclip size={17} /></button><textarea aria-label="Information request message" disabled={!canSend || mutation.isPending} id="work-request-info-composer" onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder={canSend ? 'Type a message...' : 'No message action is currently available.'} rows={1} value={message} /><button aria-label="Send message" className="work-request-chat-composer__send" disabled={!valid || mutation.isPending} type="submit"><Send size={16} />{mutation.isPending ? 'Sending' : 'Send'}</button></div></form>;
 }
